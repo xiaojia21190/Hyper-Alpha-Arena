@@ -35,6 +35,30 @@ require_cmd docker
 require_cmd curl
 require_cmd python
 
+LOCAL_PROXY_PATTERN='(127\.0\.0\.1|localhost):[0-9]+'
+PROXY_VARS=(http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy)
+
+disable_localhost_proxy_if_needed() {
+  local found_local_proxy="false"
+  local var_name=""
+  local var_value=""
+  for var_name in "${PROXY_VARS[@]}"; do
+    var_value="${!var_name:-}"
+    if [[ -n "${var_value}" ]] && [[ "${var_value}" =~ ${LOCAL_PROXY_PATTERN} ]]; then
+      found_local_proxy="true"
+      break
+    fi
+  done
+
+  if [[ "${found_local_proxy}" == "true" ]]; then
+    echo "[warn] detected localhost proxy in environment (e.g. 127.0.0.1:7890)."
+    echo "[warn] disabling proxy env for docker build/run to avoid container network failure."
+    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+  fi
+}
+
+disable_localhost_proxy_if_needed
+
 create_account() {
   local account_name="$1"
   local account_id
