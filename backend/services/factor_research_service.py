@@ -38,11 +38,26 @@ DEFAULT_RESEARCH_RUN_CONFIG = {
 
 
 def get_all_ticker_data_from_hyperliquid(environment: str = "mainnet") -> list[dict]:
-    from services.hyperliquid_market_data import (
-        get_all_ticker_data_from_hyperliquid as load_all_ticker_data,
-    )
+    try:
+        from services.hyperliquid_market_data import (
+            get_all_ticker_data_from_hyperliquid as load_all_ticker_data,
+        )
+        return load_all_ticker_data(environment=environment)
+    except Exception as exc:
+        logger.warning(
+            "[FactorResearch] get_all_ticker_data_from_hyperliquid import fallback: %s",
+            exc,
+        )
+        try:
+            from services.hyperliquid_market_data import HyperliquidClient
 
-    return load_all_ticker_data(environment=environment)
+            return HyperliquidClient(environment=environment).get_all_ticker_data()
+        except Exception:
+            logger.exception(
+                "[FactorResearch] Failed to load ticker rows for environment=%s",
+                environment,
+            )
+            return []
 
 
 def calculate_return_over_drawdown_score(
