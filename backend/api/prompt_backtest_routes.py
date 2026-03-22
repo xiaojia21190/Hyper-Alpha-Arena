@@ -10,9 +10,8 @@ Provides endpoints for:
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import List, Optional
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -163,7 +162,7 @@ def create_backtest_task(
 ):
     """Create a new prompt backtest task."""
     # Validate account exists
-    account = db.query(Account).filter(Account.id == request.account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == request.account_id, Account.is_deleted.is_(False)).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 

@@ -10,7 +10,7 @@ Provides tools for:
 
 import json
 import logging
-from typing import Dict, List, Any, Optional
+from typing import List, Optional
 import re
 
 from sqlalchemy.orm import Session
@@ -267,7 +267,7 @@ def execute_get_trader_details(db: Session, trader_id: int) -> str:
         account = db.query(Account).filter(
             Account.id == trader_id,
             Account.is_active == "true",
-            Account.is_deleted != True
+            Account.is_deleted.is_(False)
         ).first()
 
         if not account:

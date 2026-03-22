@@ -4,12 +4,10 @@ Provides multi-dimensional analysis of trading decisions and performance.
 """
 
 from datetime import datetime, date, timedelta
-from decimal import Decimal
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, case, and_, or_
 from sqlalchemy.orm import Session
 
 from database.connection import SessionLocal
@@ -203,7 +201,7 @@ def build_base_query(
     if exchange and exchange != "all":
         if exchange == "hyperliquid":
             query = query.filter(
-                (AIDecisionLog.exchange == "hyperliquid") | (AIDecisionLog.exchange == None)
+                (AIDecisionLog.exchange == "hyperliquid") | (AIDecisionLog.exchange.is_(None))
             )
         else:
             query = query.filter(AIDecisionLog.exchange == exchange)
@@ -449,7 +447,7 @@ def get_analytics_by_account(
     if account_ids:
         accounts = db.query(Account).filter(
             Account.id.in_(account_ids),
-            Account.is_deleted != True
+            Account.is_deleted.is_(False)
         ).all()
         account_info = {
             a.id: {"name": a.name, "model": a.model, "environment": a.hyperliquid_environment}
@@ -832,7 +830,7 @@ async def get_conversation_messages(
     token_model = None
     api_format = "openai"
     if account_id:
-        acct = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        acct = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if acct and acct.model:
             token_model = acct.model
             from services.ai_decision_service import detect_api_format
@@ -1013,7 +1011,7 @@ def get_trade_details(
             q = q.filter(AIDecisionLog.account_id == account_id)
         if exchange and exchange != "all":
             if exchange == "hyperliquid":
-                q = q.filter((AIDecisionLog.exchange == "hyperliquid") | (AIDecisionLog.exchange == None))
+                q = q.filter((AIDecisionLog.exchange == "hyperliquid") | (AIDecisionLog.exchange.is_(None)))
             else:
                 q = q.filter(AIDecisionLog.exchange == exchange)
         return q
@@ -1029,7 +1027,7 @@ def get_trade_details(
             q = q.filter(ProgramExecutionLog.account_id == account_id)
         if exchange and exchange != "all":
             if exchange == "hyperliquid":
-                q = q.filter((ProgramExecutionLog.exchange == "hyperliquid") | (ProgramExecutionLog.exchange == None))
+                q = q.filter((ProgramExecutionLog.exchange == "hyperliquid") | (ProgramExecutionLog.exchange.is_(None)))
             else:
                 q = q.filter(ProgramExecutionLog.exchange == exchange)
         return q
@@ -1045,7 +1043,7 @@ def get_trade_details(
 
     # === Query Program logs ===
     prog_query = db.query(ProgramExecutionLog).filter(
-        ProgramExecutionLog.success == True,
+        ProgramExecutionLog.success,
         ProgramExecutionLog.decision_action.in_(["buy", "sell", "close"]),
         ProgramExecutionLog.realized_pnl.isnot(None),
         ProgramExecutionLog.realized_pnl != 0,
@@ -1246,7 +1244,6 @@ def get_trade_replay(
 
     # Determine if this is an entry or exit record
     is_entry = trade.operation in ('buy', 'sell')
-    is_exit = trade.operation == 'close' or (trade.realized_pnl is not None and trade.realized_pnl != 0)
 
     entry_decision = None
     exit_decision = None
@@ -1344,8 +1341,6 @@ def get_trade_replay(
                 })
 
     # Calculate summary
-    entry_price = None
-    exit_price = None
     hold_duration = None
 
     if entry_time and exit_time:
@@ -1417,7 +1412,7 @@ def _parse_decision_prices(decision: AIDecisionLog) -> dict:
         prices["sl_price"] = snapshot.get("stop_loss_price") or snapshot.get("sl_price")
         # For exit/close: min_price is the exit price limit
         prices["exit_price"] = snapshot.get("min_price") if operation == "close" else None
-    except:
+    except Exception:
         pass
     return prices
 
@@ -1731,7 +1726,7 @@ def build_program_base_query(
     Only includes executions with non-zero realized_pnl (closed positions).
     """
     query = db.query(ProgramExecutionLog).filter(
-        ProgramExecutionLog.success == True,
+        ProgramExecutionLog.success,
         ProgramExecutionLog.decision_action.in_(["buy", "sell", "close"]),
         ProgramExecutionLog.realized_pnl.isnot(None),  # Exclude unsync trades
         ProgramExecutionLog.realized_pnl != 0,  # Exclude opening trades (no settled PnL)
@@ -1752,7 +1747,7 @@ def build_program_base_query(
     if exchange and exchange != "all":
         if exchange == "hyperliquid":
             query = query.filter(
-                (ProgramExecutionLog.exchange == "hyperliquid") | (ProgramExecutionLog.exchange == None)
+                (ProgramExecutionLog.exchange == "hyperliquid") | (ProgramExecutionLog.exchange.is_(None))
             )
         else:
             query = query.filter(ProgramExecutionLog.exchange == exchange)
@@ -1925,7 +1920,7 @@ def get_program_analytics_by_program(
     if program_ids:
         programs = db.query(TradingProgram).filter(
             TradingProgram.id.in_(program_ids),
-            TradingProgram.is_deleted != True
+            TradingProgram.is_deleted.is_(False)
         ).all()
         for p in programs:
             program_names[p.id] = p.name

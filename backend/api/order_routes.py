@@ -11,7 +11,7 @@ import logging
 
 from database.connection import SessionLocal
 from database.models import User, Order, Account
-from schemas.order import OrderCreate, OrderOut
+from schemas.order import OrderOut
 from services.order_matching import create_order, check_and_execute_order, get_pending_orders, cancel_order, process_all_pending_orders
 from repositories.user_repo import verify_user_password, user_has_password, set_user_password, verify_auth_session
 
@@ -106,7 +106,7 @@ async def create_new_order(request: OrderCreateRequest, db: Session = Depends(ge
         # Resolve trading account for the user (default user initialized in backend/main.py has at least one account)
         account = (
             db.query(Account)
-            .filter(Account.user_id == user.id, Account.is_active == "true", Account.is_deleted != True)
+            .filter(Account.user_id == user.id, Account.is_active == "true", Account.is_deleted.is_(False))
             .first()
         )
         if not account:

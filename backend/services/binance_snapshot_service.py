@@ -7,14 +7,12 @@ Periodically snapshots Binance Futures account states for asset curve display.
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from database.connection import SessionLocal
 from database.models import Account, BinanceWallet, BinanceAccountSnapshot
 from services.binance_trading_client import BinanceTradingClient
 from services.hyperliquid_environment import get_global_trading_mode
-from api.ws import broadcast_arena_asset_update, manager
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +74,7 @@ class BinanceSnapshotService:
             ).filter(
                 Account.is_active == "true",
                 Account.account_type == "AI",
-                Account.is_deleted != True,
+                Account.is_deleted.is_(False),
                 BinanceWallet.environment == global_environment,
                 BinanceWallet.is_active == "true"
             ).distinct().all()

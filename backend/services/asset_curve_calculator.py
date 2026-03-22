@@ -165,8 +165,8 @@ def get_all_asset_curves_data_new(
     # Get all active accounts for paper mode (filtered by show_on_dashboard)
     accounts = db.query(Account).filter(
         Account.is_active == "true",
-        Account.show_on_dashboard == True,
-        Account.is_deleted != True,
+        Account.show_on_dashboard,
+        Account.is_deleted.is_(False),
     ).all()
     account_map = {account.id: account for account in accounts}
     rows = _get_bucketed_snapshots(db, bucket_minutes)
@@ -246,8 +246,8 @@ def _build_hyperliquid_asset_curve(
         account_query = db.query(Account).filter(
             Account.is_active == "true",
             Account.account_type == "AI",
-            Account.show_on_dashboard == True,
-            Account.is_deleted != True,
+            Account.show_on_dashboard,
+            Account.is_deleted.is_(False),
         )
 
         # Filter by specific account if provided
@@ -388,8 +388,8 @@ def _build_binance_asset_curve(
     account_query = db.query(Account).filter(
         Account.is_active == "true",
         Account.account_type == "AI",
-        Account.show_on_dashboard == True,
-        Account.is_deleted != True,
+        Account.show_on_dashboard,
+        Account.is_deleted.is_(False),
     )
     if account_id:
         account_query = account_query.filter(Account.id == account_id)

@@ -25,7 +25,6 @@ User Control:
 - NULL enabled_skills = all skills enabled (default)
 """
 
-import os
 import json
 import logging
 from pathlib import Path

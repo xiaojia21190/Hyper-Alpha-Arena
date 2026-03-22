@@ -328,7 +328,7 @@ def _build_sampling_data(samples: Optional[List], target_symbol: Optional[str], 
                 from datetime import datetime
                 dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                 time_str = dt.strftime('%H:%M:%S')
-            except:
+            except Exception:
                 time_str = timestamp
         else:
             time_str = 'N/A'
@@ -377,7 +377,7 @@ def _build_multi_symbol_sampling_data(symbols: List[str], sampling_pool, samplin
                 try:
                     dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                     time_str = dt.strftime('%H:%M:%S')
-                except:
+                except Exception:
                     time_str = timestamp
             else:
                 time_str = 'N/A'
@@ -685,8 +685,6 @@ def _build_prompt_context(
     total_account_value = _format_currency(portfolio.get('total_assets'))
     holdings_detail = _build_holdings_detail(positions)
     market_prices = _build_market_prices(prices, ordered_symbols, symbol_display_map)
-    # Legacy format (kept for backward compatibility with old templates)
-    output_format_legacy = OUTPUT_FORMAT_JSON.replace(SYMBOL_PLACEHOLDER, output_symbol_choices or "SYMBOL")
 
     # Hyperliquid-specific context - Get leverage settings from unified function
     # This ensures leverage values match the wallet configuration for the current environment
@@ -702,7 +700,7 @@ def _build_prompt_context(
             default_leverage = getattr(account, "default_leverage", 1)
     else:
         # Fallback if db not provided (should not happen in normal operation)
-        logger.warning(f"No db session provided to _build_prompt_context, using Account table fallback for leverage")
+        logger.warning("No db session provided to _build_prompt_context, using Account table fallback for leverage")
         max_leverage = getattr(account, "max_leverage", 3)
         default_leverage = getattr(account, "default_leverage", 1)
 
@@ -969,7 +967,7 @@ def _build_prompt_context(
     trigger_context_text = ""
     if trigger_context:
         trigger_type = trigger_context.get("trigger_type", "unknown")
-        lines = [f"=== TRIGGER CONTEXT ===", f"trigger_type: {trigger_type}"]
+        lines = ["=== TRIGGER CONTEXT ===", f"trigger_type: {trigger_type}"]
 
         if trigger_type == "signal":
             pool_name = trigger_context.get("signal_pool_name", "Unknown")
@@ -1000,7 +998,6 @@ def _build_prompt_context(
                         sell = sig.get("sell", 0)
                         ratio = sig.get("ratio", 0)
                         ratio_threshold = sig.get("ratio_threshold", 1.5)
-                        volume_threshold = sig.get("volume_threshold", 0)
                         # Calculate dominant side multiplier for clarity
                         if direction == "buy" and ratio > 0:
                             multiplier = ratio
@@ -1011,7 +1008,7 @@ def _build_prompt_context(
                         else:
                             multiplier = ratio
                             dominant = "N/A"
-                        lines.append(f"    metric: taker_volume")
+                        lines.append("    metric: taker_volume")
                         lines.append(f"    direction: {direction}")
                         lines.append(f"    taker_buy: ${buy/1e6:.2f}M")
                         lines.append(f"    taker_sell: ${sell/1e6:.2f}M")
@@ -2273,7 +2270,7 @@ def call_ai_for_decision(
         try:
             if 'text_content' in locals():
                 logger.error(f"Content that failed to parse: {text_content[:500]}")
-        except:
+        except Exception:
             pass
         return None
     except Exception as err:
@@ -2468,7 +2465,7 @@ def get_active_ai_accounts(db: Session) -> List[Account]:
         Account.is_active == "true",
         Account.account_type == "AI",
         Account.auto_trading_enabled == "true",
-        Account.is_deleted != True
+        Account.is_deleted.is_(False)
     ).all()
     
     if not accounts:
@@ -2705,7 +2702,7 @@ def _build_factor_context(
                 context[var_name] = " | ".join(parts)
             except Exception as e:
                 logger.warning(f"Failed to compute factor {factor_name} for {symbol}/{period}: {e}")
-                context[var_name] = f"Error computing factor"
+                context[var_name] = "Error computing factor"
 
     finally:
         db.close()
@@ -2864,7 +2861,7 @@ def _format_single_indicator(indicator_name: str, indicator_data: Any) -> str:
             result = [
                 f"VWAP: {current:.2f}",
                 f"VWAP last 5: {', '.join(f'{v:.2f}' for v in last_5)}",
-                f"Note: Price above VWAP suggests bullish sentiment, below suggests bearish"
+                "Note: Price above VWAP suggests bullish sentiment, below suggests bearish"
             ]
             return "\n".join(result)
 
@@ -3138,7 +3135,6 @@ def _build_klines_and_indicators_context(
         Dict mapping variable names to formatted strings
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    import threading
 
     context = {}
 

@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 from typing import Optional, List
-from database.models import Account, User
-from decimal import Decimal
+from database.models import Account
 
 
 def create_account(
@@ -36,12 +35,12 @@ def create_account(
 
 def get_account(db: Session, account_id: int) -> Optional[Account]:
     """Get account by ID"""
-    return db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+    return db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
 
 
 def get_accounts_by_user(db: Session, user_id: int, active_only: bool = True) -> List[Account]:
     """Get all accounts for a user"""
-    query = db.query(Account).filter(Account.user_id == user_id, Account.is_deleted != True)
+    query = db.query(Account).filter(Account.user_id == user_id, Account.is_deleted.is_(False))
     if active_only:
         query = query.filter(Account.is_active == "true")
     return query.all()
@@ -84,7 +83,7 @@ def update_account(
     api_key: str = None
 ) -> Optional[Account]:
     """Update account information"""
-    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
     if not account:
         return None
 
@@ -109,7 +108,7 @@ def update_account_cash(
     frozen_cash: float = None
 ) -> Optional[Account]:
     """Update account cash balance"""
-    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
     if not account:
         return None
     
@@ -124,7 +123,7 @@ def update_account_cash(
 
 def deactivate_account(db: Session, account_id: int) -> Optional[Account]:
     """Deactivate an account"""
-    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
     if not account:
         return None
 
@@ -136,7 +135,7 @@ def deactivate_account(db: Session, account_id: int) -> Optional[Account]:
 
 def activate_account(db: Session, account_id: int) -> Optional[Account]:
     """Activate an account"""
-    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
     if not account:
         return None
     

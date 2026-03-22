@@ -11,12 +11,11 @@ import re
 import time
 import requests
 from typing import Dict, List, Optional, Any
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from database.models import AiSignalConversation, AiSignalMessage, Account
-from services.ai_decision_service import build_chat_completion_endpoints, detect_api_format, _extract_text_from_message, get_max_tokens, build_llm_payload, build_llm_headers, extract_reasoning, convert_tools_to_anthropic, convert_messages_to_anthropic, strip_thinking_tags
+from services.ai_decision_service import build_chat_completion_endpoints, detect_api_format, _extract_text_from_message, build_llm_payload, build_llm_headers, extract_reasoning, convert_tools_to_anthropic, convert_messages_to_anthropic, strip_thinking_tags
 from services.signal_backtest_service import signal_backtest_service, TIMEFRAME_MS
 from services.system_logger import system_logger
 
@@ -321,7 +320,7 @@ def generate_signal_with_ai(
         account = db.query(Account).filter(
             Account.id == account_id,
             Account.account_type == "AI",
-            Account.is_deleted != True
+            Account.is_deleted.is_(False)
         ).first()
 
         if not account:
@@ -953,7 +952,7 @@ def _tool_get_kline_context(
         if exchange == "binance":
             # Binance USDS-M Futures API
             binance_symbol = f"{symbol.upper()}USDT"
-            url = f"https://fapi.binance.com/fapi/v1/klines"
+            url = "https://fapi.binance.com/fapi/v1/klines"
             params = {
                 "symbol": binance_symbol,
                 "interval": interval,
@@ -1067,10 +1066,9 @@ def _tool_get_indicators_batch(
                 from database.models import CustomFactor
                 from services.factor_expression_engine import factor_expression_engine
                 from services.market_data import get_kline_data
-                import pandas as pd
 
                 factor = db.query(CustomFactor).filter(
-                    CustomFactor.name == factor_name, CustomFactor.is_active == True
+                    CustomFactor.name == factor_name, CustomFactor.is_active
                 ).first()
                 if not factor:
                     results["indicators"][indicator] = {"error": f"Factor '{factor_name}' not found"}
@@ -1379,7 +1377,7 @@ def _tool_predict_signal_combination(
             ts_index = preloaded_indexes.get("taker_ratio", [])
 
             if not raw_data:
-                return {"error": f"No data found for taker_volume"}
+                return {"error": "No data found for taker_volume"}
 
             triggers = _find_taker_volume_triggers(
                 raw_data, ts_index, direction, ratio_threshold, volume_threshold, interval_ms
@@ -1452,7 +1450,6 @@ def _find_factor_signal_triggers(
     import pandas as pd
     from database.models import CustomFactor
     from services.factor_expression_engine import factor_expression_engine
-    from sqlalchemy import text
 
     metric = sig.get("indicator", "")
     factor_name = metric.split(":", 1)[1] if ":" in metric else metric
@@ -1461,10 +1458,10 @@ def _find_factor_signal_triggers(
     tw = sig.get("time_window", "1h")
 
     if not all([operator, threshold is not None]):
-        return {"error": f"Factor signal missing operator/threshold"}
+        return {"error": "Factor signal missing operator/threshold"}
 
     factor = db.query(CustomFactor).filter(
-        CustomFactor.name == factor_name, CustomFactor.is_active == True
+        CustomFactor.name == factor_name, CustomFactor.is_active
     ).first()
     if not factor:
         return {"error": f"Factor '{factor_name}' not found"}
@@ -1735,7 +1732,7 @@ def generate_signal_with_ai_stream(
             account = db.query(Account).filter(
                 Account.id == account_id,
                 Account.account_type == "AI",
-                Account.is_deleted != True
+                Account.is_deleted.is_(False)
             ).first()
 
             if not account:
@@ -1971,7 +1968,7 @@ def generate_signal_with_ai_stream(
                     api_tool_calls = tool_calls if tool_calls else None
             except Exception as e:
                 logger.error(f"[AI Signal Gen Stream {request_id}] Failed to parse response: {e}")
-                system_logger.add_log("ERROR", "ai_signal_gen", f"Failed to parse response", {"error": str(e), "request_id": request_id})
+                system_logger.add_log("ERROR", "ai_signal_gen", "Failed to parse response", {"error": str(e), "request_id": request_id})
                 yield _sse_event("error", {"message": f"Failed to parse response: {e}"})
                 return
 
@@ -2079,6 +2076,6 @@ def generate_signal_with_ai_stream(
 
     except Exception as e:
         logger.error(f"[AI Signal Gen Stream {request_id}] Error: {e}", exc_info=True)
-        system_logger.add_log("ERROR", "ai_signal_gen", f"Unexpected error in AI signal generation", {"error": str(e), "request_id": request_id})
+        system_logger.add_log("ERROR", "ai_signal_gen", "Unexpected error in AI signal generation", {"error": str(e), "request_id": request_id})
         db.rollback()
         yield _sse_event("error", {"message": str(e)})

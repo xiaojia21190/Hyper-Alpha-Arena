@@ -11,9 +11,8 @@ Architecture:
 import json
 import logging
 import threading
-import time
-from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Optional, List, Tuple
+from datetime import datetime, timezone
+from typing import Dict, Optional, Tuple
 
 
 def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
@@ -32,12 +31,12 @@ from sqlalchemy import func
 
 from database.connection import SessionLocal
 from database.models import (
-    TradingProgram, AccountProgramBinding, ProgramExecutionLog,
+    AccountProgramBinding, ProgramExecutionLog,
     Account, HyperliquidWallet, BinanceWallet, AIDecisionLog,
     User, UserSubscription
 )
 from program_trader.executor import execute_strategy
-from program_trader.models import MarketData, ActionType
+from program_trader.models import MarketData
 from program_trader.data_provider import DataProvider
 from config.settings import BINANCE_DAILY_QUOTA_LIMIT
 
@@ -130,8 +129,8 @@ class ProgramExecutionService:
         try:
             # Find active bindings that include this pool_id
             all_bindings = db.query(AccountProgramBinding).filter(
-                AccountProgramBinding.is_active == True,
-                AccountProgramBinding.is_deleted != True
+                AccountProgramBinding.is_active,
+                AccountProgramBinding.is_deleted.is_(False)
             ).all()
 
             # Filter bindings that have this pool_id in their signal_pool_ids
@@ -142,7 +141,7 @@ class ProgramExecutionService:
                         pool_ids = json.loads(binding.signal_pool_ids)
                         if pool_id in pool_ids:
                             bindings.append(binding)
-                    except:
+                    except Exception:
                         pass
 
             if not bindings:
@@ -187,9 +186,9 @@ class ProgramExecutionService:
         db = SessionLocal()
         try:
             bindings = db.query(AccountProgramBinding).filter(
-                AccountProgramBinding.is_active == True,
-                AccountProgramBinding.scheduled_trigger_enabled == True,
-                AccountProgramBinding.is_deleted != True
+                AccountProgramBinding.is_active,
+                AccountProgramBinding.scheduled_trigger_enabled,
+                AccountProgramBinding.is_deleted.is_(False)
             ).all()
 
             for binding in bindings:
@@ -242,8 +241,8 @@ class ProgramExecutionService:
         try:
             binding = db.query(AccountProgramBinding).filter(
                 AccountProgramBinding.id == binding_id,
-                AccountProgramBinding.is_active == True,
-                AccountProgramBinding.is_deleted != True
+                AccountProgramBinding.is_active,
+                AccountProgramBinding.is_deleted.is_(False)
             ).first()
 
             if not binding:
@@ -388,13 +387,13 @@ class ProgramExecutionService:
             if program.params:
                 try:
                     params = json.loads(program.params)
-                except:
+                except Exception:
                     pass
             if binding.params_override:
                 try:
                     override = json.loads(binding.params_override)
                     params.update(override)
-                except:
+                except Exception:
                     pass
 
             # Execute strategy
@@ -514,7 +513,6 @@ class ProgramExecutionService:
         Populates all fields to match AI Trader's prompt context variables,
         ensuring Programs have access to the same information.
         """
-        from program_trader.models import RegimeInfo
 
         account_info = data_provider.get_account_info()
 
@@ -906,7 +904,7 @@ class ProgramExecutionService:
             return False
 
         if not environment:
-            logger.error(f"[ProgramExecution] No trading environment configured")
+            logger.error("[ProgramExecution] No trading environment configured")
             return False
 
         try:

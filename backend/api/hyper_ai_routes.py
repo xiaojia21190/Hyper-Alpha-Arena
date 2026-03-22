@@ -19,7 +19,7 @@ Endpoints:
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
@@ -232,7 +232,7 @@ def list_conversations(
 ):
     """List recent conversations (excluding onboarding). Bot conversations pinned first."""
     conversations = db.query(HyperAiConversation).filter(
-        HyperAiConversation.is_onboarding != True
+        HyperAiConversation.is_onboarding.is_(False)
     ).order_by(
         HyperAiConversation.is_bot_conversation.desc(),
         HyperAiConversation.updated_at.desc()

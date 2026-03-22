@@ -9,7 +9,6 @@ Handles async execution of prompt backtest tasks:
 
 import json
 import logging
-import re
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -49,7 +48,7 @@ def execute_backtest_task(task_id: int) -> None:
         task.started_at = datetime.now(timezone.utc)
         db.commit()
 
-        account = db.query(Account).filter(Account.id == task.account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == task.account_id, Account.is_deleted.is_(False)).first()
         if not account:
             task.status = "failed"
             task.error_message = "Account not found"
@@ -234,7 +233,7 @@ def _get_system_prompt(db, account_id: int) -> str:
     """Get system prompt from account's prompt binding."""
     binding = db.query(AccountPromptBinding).filter(
         AccountPromptBinding.account_id == account_id,
-        AccountPromptBinding.is_deleted != True
+        AccountPromptBinding.is_deleted.is_(False)
     ).first()
 
     if binding and binding.prompt_template_id:

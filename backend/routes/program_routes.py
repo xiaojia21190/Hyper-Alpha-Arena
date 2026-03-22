@@ -229,7 +229,7 @@ def _program_to_response(program: TradingProgram, db: Session) -> ProgramRespons
     """Convert TradingProgram to response model."""
     binding_count = db.query(AccountProgramBinding).filter(
         AccountProgramBinding.program_id == program.id,
-        AccountProgramBinding.is_deleted != True
+        AccountProgramBinding.is_deleted.is_(False)
     ).count()
 
     return ProgramResponse(
@@ -251,13 +251,13 @@ def _binding_to_response(binding: AccountProgramBinding, db: Session) -> Binding
     if binding.signal_pool_ids:
         try:
             pool_ids = json.loads(binding.signal_pool_ids)
-        except:
+        except Exception:
             pass
 
     # Query signal pool names (include disabled pools for display)
     pool_names = []
     if pool_ids:
-        pools = db.query(SignalPool).filter(SignalPool.id.in_(pool_ids), SignalPool.is_deleted != True).all()
+        pools = db.query(SignalPool).filter(SignalPool.id.in_(pool_ids), SignalPool.is_deleted.is_(False)).all()
         pool_map = {p.id: p.pool_name for p in pools}
         pool_names = [pool_map.get(pid, f"Pool #{pid}") for pid in pool_ids]
 
@@ -265,7 +265,7 @@ def _binding_to_response(binding: AccountProgramBinding, db: Session) -> Binding
     if binding.params_override:
         try:
             params_override = json.loads(binding.params_override)
-        except:
+        except Exception:
             pass
 
     # Query wallets for this AI Trader based on exchange type
@@ -292,7 +292,7 @@ def _binding_to_response(binding: AccountProgramBinding, db: Session) -> Binding
                         masked_key = f"{api_key[:4]}...{api_key[-4:]}"
                     else:
                         masked_key = "****"
-                except:
+                except Exception:
                     masked_key = "****"
                 wallets.append(WalletInfo(environment=w.environment, address=masked_key))
     else:
@@ -626,14 +626,14 @@ def get_program_dev_guide(lang: str = "en") -> dict:
 @router.get("/signal-pools/", response_model=List[SignalPoolInfo])
 def list_signal_pools(db: Session = Depends(get_db)):
     """List available signal pools."""
-    pools = db.query(SignalPool).filter(SignalPool.enabled == True, SignalPool.is_deleted != True).all()
+    pools = db.query(SignalPool).filter(SignalPool.enabled, SignalPool.is_deleted.is_(False)).all()
     result = []
     for pool in pools:
         symbols = pool.symbols
         if isinstance(symbols, str):
             try:
                 symbols = json.loads(symbols)
-            except:
+            except Exception:
                 symbols = []
         result.append(SignalPoolInfo(
             id=pool.id,
@@ -651,7 +651,7 @@ def list_accounts(db: Session = Depends(get_db)):
     accounts = db.query(Account).filter(
         Account.is_active == "true",
         Account.account_type == "AI",
-        Account.is_deleted != True
+        Account.is_deleted.is_(False)
     ).all()
     return [AccountInfo(id=a.id, name=a.name, model=a.model) for a in accounts]
 
@@ -666,7 +666,7 @@ def list_programs(db: Session = Depends(get_db)):
     user = get_default_user(db)
     programs = db.query(TradingProgram).filter(
         TradingProgram.user_id == user.id,
-        TradingProgram.is_deleted != True
+        TradingProgram.is_deleted.is_(False)
     ).order_by(TradingProgram.updated_at.desc()).all()
 
     return [_program_to_response(p, db) for p in programs]
@@ -964,7 +964,7 @@ def get_program(program_id: int, db: Session = Depends(get_db)):
     program = db.query(TradingProgram).filter(
         TradingProgram.id == program_id,
         TradingProgram.user_id == user.id,
-        TradingProgram.is_deleted != True
+        TradingProgram.is_deleted.is_(False)
     ).first()
 
     if not program:
@@ -980,7 +980,7 @@ def update_program(program_id: int, data: ProgramUpdate, db: Session = Depends(g
     program = db.query(TradingProgram).filter(
         TradingProgram.id == program_id,
         TradingProgram.user_id == user.id,
-        TradingProgram.is_deleted != True
+        TradingProgram.is_deleted.is_(False)
     ).first()
 
     if not program:
@@ -1044,7 +1044,7 @@ def list_bindings(
 ):
     """List program bindings, optionally filtered by program_id or account_id."""
     query = db.query(AccountProgramBinding).filter(
-        AccountProgramBinding.is_deleted != True
+        AccountProgramBinding.is_deleted.is_(False)
     )
 
     if program_id:
@@ -1060,12 +1060,12 @@ def list_bindings(
 def create_binding(data: BindingCreate, account_id: int = Query(...), db: Session = Depends(get_db)):
     """Create a new binding between an AI Trader and a Program."""
     # Verify account exists
-    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
     if not account:
         raise HTTPException(status_code=404, detail="AI Trader not found")
 
     # Verify program exists
-    program = db.query(TradingProgram).filter(TradingProgram.id == data.program_id, TradingProgram.is_deleted != True).first()
+    program = db.query(TradingProgram).filter(TradingProgram.id == data.program_id, TradingProgram.is_deleted.is_(False)).first()
     if not program:
         raise HTTPException(status_code=404, detail="Program not found")
 
@@ -1073,7 +1073,7 @@ def create_binding(data: BindingCreate, account_id: int = Query(...), db: Sessio
     existing = db.query(AccountProgramBinding).filter(
         AccountProgramBinding.account_id == account_id,
         AccountProgramBinding.program_id == data.program_id,
-        AccountProgramBinding.is_deleted != True
+        AccountProgramBinding.is_deleted.is_(False)
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Binding already exists")
@@ -1100,7 +1100,7 @@ def update_binding(binding_id: int, data: BindingUpdate, db: Session = Depends(g
     """Update a program binding's trigger configuration."""
     binding = db.query(AccountProgramBinding).filter(
         AccountProgramBinding.id == binding_id,
-        AccountProgramBinding.is_deleted != True
+        AccountProgramBinding.is_deleted.is_(False)
     ).first()
 
     if not binding:
@@ -1178,7 +1178,6 @@ def preview_run_binding(binding_id: int, db: Session = Depends(get_db)):
     - Final decision
     """
     import time
-    import traceback
     from program_trader.executor import SandboxExecutor
     from program_trader.data_provider import DataProvider
     from program_trader.models import MarketData
@@ -1190,7 +1189,7 @@ def preview_run_binding(binding_id: int, db: Session = Depends(get_db)):
     # Get binding
     binding = db.query(AccountProgramBinding).filter(
         AccountProgramBinding.id == binding_id,
-        AccountProgramBinding.is_deleted != True
+        AccountProgramBinding.is_deleted.is_(False)
     ).first()
     if not binding:
         raise HTTPException(status_code=404, detail="Binding not found")
@@ -1201,7 +1200,7 @@ def preview_run_binding(binding_id: int, db: Session = Depends(get_db)):
     # Get program
     program = db.query(TradingProgram).filter(
         TradingProgram.id == binding.program_id,
-        TradingProgram.is_deleted != True
+        TradingProgram.is_deleted.is_(False)
     ).first()
     if not program:
         raise HTTPException(status_code=404, detail="Program not found")
@@ -1230,14 +1229,14 @@ def preview_run_binding(binding_id: int, db: Session = Depends(get_db)):
         try:
             pool_ids = json.loads(binding.signal_pool_ids)
             if pool_ids:
-                pool = db.query(SignalPool).filter(SignalPool.id == pool_ids[0], SignalPool.is_deleted != True).first()
+                pool = db.query(SignalPool).filter(SignalPool.id == pool_ids[0], SignalPool.is_deleted.is_(False)).first()
                 if pool and pool.symbols:
                     symbols = pool.symbols
                     if isinstance(symbols, str):
                         symbols = json.loads(symbols)
                     if symbols:
                         trigger_symbol = symbols[0]
-        except:
+        except Exception:
             pass
 
     # Create trading client and data provider with query recording
@@ -1368,7 +1367,7 @@ def preview_run_binding(binding_id: int, db: Session = Depends(get_db)):
         if binding.params_override:
             try:
                 params = json.loads(binding.params_override)
-            except:
+            except Exception:
                 pass
 
         executor = SandboxExecutor(timeout_seconds=5)
@@ -1417,13 +1416,13 @@ def run_backtest(program_id: int, request: BacktestRequest, db: Session = Depend
     with backend/backtest/engine.py and HistoricalDataProvider.
     """
     from database.models import CryptoKline
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     user = get_default_user(db)
     program = db.query(TradingProgram).filter(
         TradingProgram.id == program_id,
         TradingProgram.user_id == user.id,
-        TradingProgram.is_deleted != True
+        TradingProgram.is_deleted.is_(False)
     ).first()
 
     if not program:
@@ -1557,7 +1556,7 @@ def list_executions(
         if exchange == "hyperliquid":
             # Include hyperliquid or NULL (legacy data)
             query = query.filter(
-                (ProgramExecutionLog.exchange == "hyperliquid") | (ProgramExecutionLog.exchange == None)
+                (ProgramExecutionLog.exchange == "hyperliquid") | (ProgramExecutionLog.exchange.is_(None))
             )
         else:
             query = query.filter(ProgramExecutionLog.exchange == exchange)
@@ -1647,7 +1646,6 @@ async def query_market_data(
     in your strategy code. Returns real-time data for all available indicators.
     """
     import time
-    from datetime import datetime
     from services.technical_indicators import calculate_indicator
     from services.market_flow_indicators import get_flow_indicators_for_prompt
     from services.market_regime_service import get_market_regime
@@ -1780,7 +1778,7 @@ class BacktestRequest(BaseModel):
 
 
 @router.post("/backtest")
-async def run_backtest(request: BacktestRequest, db: Session = Depends(get_db)):
+async def run_binding_backtest(request: BacktestRequest, db: Session = Depends(get_db)):
     """
     Run backtest for a program binding with SSE progress updates.
 
@@ -1791,10 +1789,8 @@ async def run_backtest(request: BacktestRequest, db: Session = Depends(get_db)):
     - type: "error" - Error message
     """
     from backtest import (
-        BacktestConfig, ProgramBacktestEngine,
-        BacktestResult as BacktestResultData, TriggerEvent
+        BacktestConfig, ProgramBacktestEngine
     )
-    from backtest.engine import INTERVAL_MS
     import time
 
     # Clamp end_time to current time (no future backtesting)
@@ -1809,7 +1805,7 @@ async def run_backtest(request: BacktestRequest, db: Session = Depends(get_db)):
     # Get binding info
     binding = db.query(AccountProgramBinding).filter(
         AccountProgramBinding.id == request.binding_id,
-        AccountProgramBinding.is_deleted != True
+        AccountProgramBinding.is_deleted.is_(False)
     ).first()
 
     if not binding:
@@ -1818,7 +1814,7 @@ async def run_backtest(request: BacktestRequest, db: Session = Depends(get_db)):
     # Get program
     program = db.query(TradingProgram).filter(
         TradingProgram.id == binding.program_id,
-        TradingProgram.is_deleted != True
+        TradingProgram.is_deleted.is_(False)
     ).first()
 
     if not program:
@@ -1838,7 +1834,7 @@ async def run_backtest(request: BacktestRequest, db: Session = Depends(get_db)):
         signal_pool_ids = pool_ids
 
         for pool_id in pool_ids:
-            pool = db.query(SignalPool).filter(SignalPool.id == pool_id, SignalPool.is_deleted != True).first()
+            pool = db.query(SignalPool).filter(SignalPool.id == pool_id, SignalPool.is_deleted.is_(False)).first()
             if pool:
                 if pool.symbols:
                     # symbols is a list field
@@ -1947,8 +1943,8 @@ async def _run_backtest_with_progress(engine, config, signal_triggers, db, backt
     Uses engine.run_event_loop_generator for core logic (including dynamic scheduled triggers).
     This function only handles SSE progress updates and database logging.
     """
-    from backtest import VirtualAccount, ExecutionSimulator, HistoricalDataProvider, TriggerExecutionResult
-    from datetime import datetime, timezone
+    from backtest import VirtualAccount, ExecutionSimulator, HistoricalDataProvider
+    from datetime import timezone
     import time
 
     start_time = time.time()

@@ -7,9 +7,8 @@ from decimal import Decimal
 from typing import Dict, Optional, Tuple, List, Iterable, Any
 
 from sqlalchemy.orm import Session
-from sqlalchemy import text, func
-import time
-from datetime import datetime, timedelta
+from sqlalchemy import func
+from datetime import datetime
 
 from database.connection import SessionLocal
 from database.models import (
@@ -29,13 +28,11 @@ from services.ai_decision_service import (
     call_ai_for_decision,
     save_ai_decision,
     get_active_ai_accounts,
-    _get_portfolio_data,
     SUPPORTED_SYMBOLS,
 )
 from services.hyperliquid_symbol_service import (
     get_selected_symbols as get_hyperliquid_selected_symbols,
     get_available_symbol_map as get_hyperliquid_symbol_map,
-    get_symbol_display as get_hyperliquid_symbol_display,
 )
 from services.binance_symbol_service import (
     get_selected_symbols as get_binance_selected_symbols,
@@ -210,7 +207,7 @@ def place_ai_driven_crypto_order(max_ratio: float = 0.2, account_ids: Optional[I
     try:
         # Handle single account strategy trigger
         if account_id is not None:
-            account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+            account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
             if not account or account.is_active != "true" or account.auto_trading_enabled != "true":
                 logger.debug(f"Account {account_id} not found, inactive, or auto trading disabled, skipping AI trading")
                 return
@@ -357,7 +354,6 @@ def place_ai_driven_hyperliquid_order(
 
     try:
         from services.hyperliquid_environment import get_hyperliquid_client
-        from database.models import HyperliquidPosition
     except Exception as e:
         logger.error(f"Error in place_ai_driven_hyperliquid_order start: {e}", exc_info=True)
         return
@@ -369,7 +365,7 @@ def place_ai_driven_hyperliquid_order(
     try:
         # Handle single account strategy trigger (manual trigger)
         if account_id is not None:
-            account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+            account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
             if not account or account.is_active != "true":
                 logger.debug(f"Account {account_id} not found or inactive")
                 return
@@ -387,7 +383,7 @@ def place_ai_driven_hyperliquid_order(
             accounts = db.query(Account).filter(
                 Account.is_active == "true",
                 Account.auto_trading_enabled == "true",
-                Account.is_deleted != True
+                Account.is_deleted.is_(False)
             ).all()
 
             if not accounts:
@@ -492,7 +488,7 @@ def place_ai_driven_hyperliquid_order(
                 from database.models import AccountPromptBinding
                 binding = db.query(AccountPromptBinding).filter(
                     AccountPromptBinding.account_id == account.id,
-                    AccountPromptBinding.is_deleted != True
+                    AccountPromptBinding.is_deleted.is_(False)
                 ).first()
                 decision_kwargs["prompt_template_id"] = binding.prompt_template_id if binding else None
             except Exception as e:
@@ -1259,7 +1255,7 @@ def place_ai_driven_binance_order(
     db = SessionLocal()
     try:
         if account_id is not None:
-            account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+            account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
             if not account or account.is_active != "true":
                 logger.debug(f"Account {account_id} not found or inactive")
                 return
@@ -1273,7 +1269,7 @@ def place_ai_driven_binance_order(
             accounts = db.query(Account).filter(
                 Account.is_active == "true",
                 Account.auto_trading_enabled == "true",
-                Account.is_deleted != True
+                Account.is_deleted.is_(False)
             ).all()
 
             if not accounts:
@@ -1355,7 +1351,7 @@ def place_ai_driven_binance_order(
                 from database.models import AccountPromptBinding
                 binding = db.query(AccountPromptBinding).filter(
                     AccountPromptBinding.account_id == account.id,
-                    AccountPromptBinding.is_deleted != True
+                    AccountPromptBinding.is_deleted.is_(False)
                 ).first()
                 decision_kwargs["prompt_template_id"] = binding.prompt_template_id if binding else None
             except Exception as e:

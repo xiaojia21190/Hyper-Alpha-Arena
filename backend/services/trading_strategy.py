@@ -13,18 +13,10 @@ from typing import Dict, Optional, Any, List
 
 from database.connection import SessionLocal
 from database.models import Account, AccountStrategyConfig, GlobalSamplingConfig
-from sqlalchemy import text
-from repositories.strategy_repo import (
-    get_strategy_by_account,
-    list_strategies,
-    upsert_strategy,
-)
 from services.sampling_pool import sampling_pool
 from services.trading_commands import (
-    place_ai_driven_crypto_order,
     place_ai_driven_hyperliquid_order,
 )
-from services.hyperliquid_symbol_service import get_selected_symbols as get_hyperliquid_selected_symbols
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +258,7 @@ class StrategyManager:
 
             # Check account configuration
             with SessionLocal() as db:
-                account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+                account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
                 if not account or account.auto_trading_enabled != "true":
                     logger.debug(f"Account {account_id} auto trading disabled, skipping strategy execution")
                     return

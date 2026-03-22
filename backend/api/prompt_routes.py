@@ -265,9 +265,6 @@ def preview_prompt(
         get_selected_symbols as get_hyperliquid_selected_symbols,
         get_available_symbol_map as get_hyperliquid_symbol_map,
     )
-    from services.binance_symbol_service import (
-        get_selected_symbols as get_binance_selected_symbols,
-    )
 
     logger = logging.getLogger(__name__)
 
@@ -381,7 +378,6 @@ def _generate_single_preview(
     SafeDict,
 ) -> dict:
     """Generate a single preview for one account and one exchange."""
-    from typing import Dict
 
     hyperliquid_state = None
     binance_state = None
@@ -658,7 +654,7 @@ from services.ai_prompt_generation_service import (
     get_conversation_history,
     get_conversation_messages
 )
-from database.models import User, UserSubscription
+from database.models import User
 
 
 class AiChatRequest(BaseModel):
@@ -703,7 +699,7 @@ def ai_chat(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Get AI Trader account
-    account = db.query(Account).filter(Account.id == request.account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == request.account_id, Account.is_deleted.is_(False)).first()
     if not account:
         raise HTTPException(status_code=404, detail="AI Trader not found")
 
@@ -753,7 +749,7 @@ def ai_chat_stream(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Get AI Trader account
-    account = db.query(Account).filter(Account.id == request.account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == request.account_id, Account.is_deleted.is_(False)).first()
     if not account:
         raise HTTPException(status_code=404, detail="AI Trader not found")
 
@@ -785,7 +781,7 @@ def ai_chat_stream(
             # Create new db session for background thread
             bg_db = SessionLocal()
             try:
-                bg_account = bg_db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+                bg_account = bg_db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
                 yield from generate_prompt_with_ai_stream(
                     db=bg_db,
                     account=bg_account,
@@ -889,7 +885,7 @@ def get_conversation_messages_api(
     token_model = None
     api_format = "openai"
     if account_id:
-        acct = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        acct = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if acct and acct.model:
             token_model = acct.model
             from services.ai_decision_service import detect_api_format

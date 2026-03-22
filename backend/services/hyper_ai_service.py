@@ -27,18 +27,14 @@ from sqlalchemy.orm import Session
 
 from database.models import (
     HyperAiProfile,
-    HyperAiMemory,
     HyperAiConversation,
     HyperAiMessage
 )
 from services.ai_decision_service import (
     build_chat_completion_endpoints,
     detect_api_format,
-    _extract_text_from_message,
-    get_max_tokens,
     build_llm_payload,
     build_llm_headers,
-    is_reasoning_model,
     extract_reasoning,
     convert_tools_to_anthropic,
     convert_messages_to_anthropic,
@@ -50,7 +46,7 @@ from services.ai_stream_service import (
     run_ai_task_in_background,
     format_sse_event
 )
-from services.hyper_ai_llm_providers import get_provider, get_all_providers
+from services.hyper_ai_llm_providers import get_provider
 from services.hyper_ai_tools import HYPER_AI_TOOLS, execute_hyper_ai_tool
 from services.hyper_ai_subagents import execute_subagent_tool
 from utils.encryption import decrypt_private_key
@@ -259,7 +255,7 @@ def test_llm_connection(
                         error_msg = err_json["error"].get("message", error_msg)
                     else:
                         error_msg = str(err_json["error"])
-            except:
+            except Exception:
                 pass
             return {"success": False, "error": error_msg}
 
@@ -1321,8 +1317,8 @@ def get_suggestions_context(db: Session) -> Dict[str, Any]:
 
     # Get recent 3 conversations (non-onboarding, non-bot)
     recent_convs = db.query(HyperAiConversation).filter(
-        HyperAiConversation.is_onboarding == False,
-        HyperAiConversation.is_bot_conversation == False
+        HyperAiConversation.is_onboarding.is_(False),
+        HyperAiConversation.is_bot_conversation.is_(False)
     ).order_by(HyperAiConversation.updated_at.desc()).limit(3).all()
 
     conversations_context = []
@@ -1346,7 +1342,7 @@ def get_suggestions_context(db: Session) -> Dict[str, Any]:
 
     # Get configuration status
     trader_count = db.query(Account).filter(
-        Account.is_deleted == False,
+        Account.is_deleted.is_(False),
         Account.account_type == "AI"
     ).count()
 
@@ -1481,7 +1477,7 @@ def generate_suggested_questions(db: Session) -> List[str]:
             text = choices[0].get("message", {}).get("content", "") if choices else ""
 
         if not text:
-            logger.warning(f"[Suggestions] LLM returned empty content")
+            logger.warning("[Suggestions] LLM returned empty content")
             return []
 
         # Parse JSON array from response
@@ -1527,8 +1523,8 @@ def get_or_update_suggestions(db: Session) -> Dict[str, Any]:
 
     # Check if we have conversations at all
     conv_count = db.query(HyperAiConversation).filter(
-        HyperAiConversation.is_onboarding == False,
-        HyperAiConversation.is_bot_conversation == False
+        HyperAiConversation.is_onboarding.is_(False),
+        HyperAiConversation.is_bot_conversation.is_(False)
     ).count()
 
     if conv_count == 0:
@@ -1543,7 +1539,7 @@ def get_or_update_suggestions(db: Session) -> Dict[str, Any]:
     if profile.suggested_questions:
         try:
             cached_suggestions = json.loads(profile.suggested_questions)
-        except:
+        except Exception:
             pass
 
     # Check if cache is stale

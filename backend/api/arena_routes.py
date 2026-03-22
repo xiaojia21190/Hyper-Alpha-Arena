@@ -30,7 +30,7 @@ from database.snapshot_models import HyperliquidTrade
 from services.asset_calculator import calc_positions_value
 from services.price_cache import get_cached_price, cache_price
 from services.market_data import get_last_price
-from services.hyperliquid_trading_client import HyperliquidTradingClient, get_cached_trading_client
+from services.hyperliquid_trading_client import HyperliquidTradingClient
 from services.hyperliquid_environment import get_hyperliquid_client
 from services.hyperliquid_cache import (
     get_cached_account_state,
@@ -86,8 +86,8 @@ def _get_hyperliquid_positions(db: Session, account_id: Optional[int], environme
     accounts_query = db.query(Account).filter(
         Account.account_type == "AI",
         Account.is_active == "true",
-        Account.show_on_dashboard == True,
-        Account.is_deleted != True
+        Account.show_on_dashboard,
+        Account.is_deleted.is_(False)
     )
 
     if account_id:
@@ -256,8 +256,8 @@ def _get_binance_positions(db: Session, account_id: Optional[int], environment: 
     accounts_query = db.query(Account).filter(
         Account.account_type == "AI",
         Account.is_active == "true",
-        Account.show_on_dashboard == True,
-        Account.is_deleted != True
+        Account.show_on_dashboard,
+        Account.is_deleted.is_(False)
     )
     if account_id:
         accounts_query = accounts_query.filter(Account.id == account_id)
@@ -587,7 +587,7 @@ def get_completed_trades(
         account_ids = {trade.account_id for trade in hyper_trades}
         account_map = {
             acc.id: acc
-            for acc in db.query(Account).filter(Account.id.in_(account_ids), Account.is_deleted != True).all()
+            for acc in db.query(Account).filter(Account.id.in_(account_ids), Account.is_deleted.is_(False)).all()
         }
 
         # Batch fetch decision logs to build order relationships
@@ -639,7 +639,7 @@ def get_completed_trades(
         # Batch fetch program names
         program_map = {}
         if program_ids:
-            programs = db.query(TradingProgram).filter(TradingProgram.id.in_(program_ids), TradingProgram.is_deleted != True).all()
+            programs = db.query(TradingProgram).filter(TradingProgram.id.in_(program_ids), TradingProgram.is_deleted.is_(False)).all()
             program_map = {p.id: p.name for p in programs}
 
         # Also query ProgramExecutionLog for orders not in AIDecisionLog
@@ -676,7 +676,7 @@ def get_completed_trades(
 
         # Batch fetch program names for ProgramExecutionLog
         if program_log_program_ids:
-            extra_programs = db.query(TradingProgram).filter(TradingProgram.id.in_(program_log_program_ids), TradingProgram.is_deleted != True).all()
+            extra_programs = db.query(TradingProgram).filter(TradingProgram.id.in_(program_log_program_ids), TradingProgram.is_deleted.is_(False)).all()
             for p in extra_programs:
                 program_map[p.id] = p.name
 
@@ -894,7 +894,7 @@ def get_completed_trades(
         query = query.filter(Trade.account_id == account_id)
 
     if trading_mode == "paper":
-        query = query.filter(Trade.hyperliquid_environment == None)
+        query = query.filter(Trade.hyperliquid_environment.is_(None))
     elif trading_mode in ("testnet", "mainnet"):
         query = query.filter(Trade.hyperliquid_environment == trading_mode)
 
@@ -1018,7 +1018,7 @@ def get_model_chat(
     # Filter by trading mode based on hyperliquid_environment field
     if trading_mode:
         if trading_mode == "paper":
-            query = query.filter(AIDecisionLog.hyperliquid_environment == None)
+            query = query.filter(AIDecisionLog.hyperliquid_environment.is_(None))
         else:
             # For testnet/mainnet, strictly match environment and exclude NULL
             query = query.filter(
@@ -1031,7 +1031,7 @@ def get_model_chat(
         if exchange == "hyperliquid":
             # Include hyperliquid or NULL (legacy data)
             query = query.filter(
-                (AIDecisionLog.exchange == "hyperliquid") | (AIDecisionLog.exchange == None)
+                (AIDecisionLog.exchange == "hyperliquid") | (AIDecisionLog.exchange.is_(None))
             )
         else:
             query = query.filter(AIDecisionLog.exchange == exchange)
@@ -1172,8 +1172,8 @@ def get_positions_snapshot(
     accounts_query = db.query(Account).filter(
         Account.account_type == "AI",
         Account.is_active == "true",
-        Account.show_on_dashboard == True,
-        Account.is_deleted != True,
+        Account.show_on_dashboard,
+        Account.is_deleted.is_(False),
     )
 
     if account_id:
@@ -1266,7 +1266,7 @@ def get_aggregated_analytics(
     '''Return leaderboard-style analytics for AI accounts.'''
     accounts_query = db.query(Account).filter(
         Account.account_type == "AI",
-        Account.is_deleted != True,
+        Account.is_deleted.is_(False),
     )
 
     if account_id:
@@ -1349,17 +1349,17 @@ def check_pnl_sync_status(
     ai_query = db.query(AIDecisionLog).filter(
         AIDecisionLog.operation.in_(["buy", "sell", "close"]),
         AIDecisionLog.executed == "true",
-        AIDecisionLog.pnl_updated_at == None,
+        AIDecisionLog.pnl_updated_at.is_(None),
         or_(
-            AIDecisionLog.hyperliquid_order_id != None,
-            AIDecisionLog.tp_order_id != None,
-            AIDecisionLog.sl_order_id != None,
+            AIDecisionLog.hyperliquid_order_id.is_not(None),
+            AIDecisionLog.tp_order_id.is_not(None),
+            AIDecisionLog.sl_order_id.is_not(None),
         ),
     )
 
     if trading_mode:
         if trading_mode == "paper":
-            ai_query = ai_query.filter(AIDecisionLog.hyperliquid_environment == None)
+            ai_query = ai_query.filter(AIDecisionLog.hyperliquid_environment.is_(None))
         else:
             ai_query = ai_query.filter(AIDecisionLog.hyperliquid_environment == trading_mode)
     else:
@@ -1369,19 +1369,19 @@ def check_pnl_sync_status(
 
     # Check Program execution logs
     prog_query = db.query(ProgramExecutionLog).filter(
-        ProgramExecutionLog.success == True,
+        ProgramExecutionLog.success,
         ProgramExecutionLog.decision_action.in_(["buy", "sell", "close"]),
-        ProgramExecutionLog.pnl_updated_at == None,
+        ProgramExecutionLog.pnl_updated_at.is_(None),
         or_(
-            ProgramExecutionLog.hyperliquid_order_id != None,
-            ProgramExecutionLog.tp_order_id != None,
-            ProgramExecutionLog.sl_order_id != None,
+            ProgramExecutionLog.hyperliquid_order_id.is_not(None),
+            ProgramExecutionLog.tp_order_id.is_not(None),
+            ProgramExecutionLog.sl_order_id.is_not(None),
         ),
     )
 
     if trading_mode:
         if trading_mode == "paper":
-            prog_query = prog_query.filter(ProgramExecutionLog.environment == None)
+            prog_query = prog_query.filter(ProgramExecutionLog.environment.is_(None))
         else:
             prog_query = prog_query.filter(ProgramExecutionLog.environment == trading_mode)
     else:
@@ -1415,12 +1415,10 @@ def update_pnl_data(db: Session = Depends(get_db)):
     from database.models import (
         HyperliquidWallet,
         BinanceWallet,
-        AccountPromptBinding,
         AIDecisionLog,
         ProgramExecutionLog,
     )
     from services.hyperliquid_environment import get_hyperliquid_client
-    from decimal import Decimal
     from collections import defaultdict
     from sqlalchemy import or_
 
@@ -1462,12 +1460,12 @@ def update_pnl_data(db: Session = Depends(get_db)):
                         AIDecisionLog.account_id == account_id,
                         AIDecisionLog.hyperliquid_environment == environment,
                         AIDecisionLog.executed == "true",
-                        AIDecisionLog.pnl_updated_at == None,
+                        AIDecisionLog.pnl_updated_at.is_(None),
                         AIDecisionLog.wallet_address.isnot(None),
                         or_(
-                            AIDecisionLog.hyperliquid_order_id != None,
-                            AIDecisionLog.tp_order_id != None,
-                            AIDecisionLog.sl_order_id != None,
+                            AIDecisionLog.hyperliquid_order_id.is_not(None),
+                            AIDecisionLog.tp_order_id.is_not(None),
+                            AIDecisionLog.sl_order_id.is_not(None),
                         ),
                     ).distinct().all()
                     historical_addresses.update(
@@ -1479,13 +1477,13 @@ def update_pnl_data(db: Session = Depends(get_db)):
                     prog_rows = db.query(ProgramExecutionLog.wallet_address).filter(
                         ProgramExecutionLog.account_id == account_id,
                         ProgramExecutionLog.environment == environment,
-                        ProgramExecutionLog.success == True,
-                        ProgramExecutionLog.pnl_updated_at == None,
+                        ProgramExecutionLog.success,
+                        ProgramExecutionLog.pnl_updated_at.is_(None),
                         ProgramExecutionLog.wallet_address.isnot(None),
                         or_(
-                            ProgramExecutionLog.hyperliquid_order_id != None,
-                            ProgramExecutionLog.tp_order_id != None,
-                            ProgramExecutionLog.sl_order_id != None,
+                            ProgramExecutionLog.hyperliquid_order_id.is_not(None),
+                            ProgramExecutionLog.tp_order_id.is_not(None),
+                            ProgramExecutionLog.sl_order_id.is_not(None),
                         ),
                     ).distinct().all()
                     historical_addresses.update(
@@ -1700,7 +1698,7 @@ def _process_fills_for_environment(
     # Also build order_id -> program_log mapping for Program Trader orders
     from database.models import ProgramExecutionLog
     program_logs = db.query(ProgramExecutionLog).filter(
-        ProgramExecutionLog.success == True,
+        ProgramExecutionLog.success,
         ProgramExecutionLog.decision_action.in_(["buy", "sell", "close"]),
     ).all()
 

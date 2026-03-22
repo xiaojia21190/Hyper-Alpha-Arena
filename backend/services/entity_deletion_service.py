@@ -17,7 +17,7 @@ Each function returns a dict with:
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from sqlalchemy.orm import Session
 
@@ -41,7 +41,7 @@ def check_trader_dependencies(db: Session, trader_id: int) -> List[str]:
     # Check prompt binding
     binding = db.query(AccountPromptBinding).filter(
         AccountPromptBinding.account_id == trader_id,
-        AccountPromptBinding.is_deleted != True
+        AccountPromptBinding.is_deleted.is_(False)
     ).first()
     if binding:
         deps.append(
@@ -52,7 +52,7 @@ def check_trader_dependencies(db: Session, trader_id: int) -> List[str]:
     # Check program bindings (any, active or not)
     prog_bindings = db.query(AccountProgramBinding).filter(
         AccountProgramBinding.account_id == trader_id,
-        AccountProgramBinding.is_deleted != True
+        AccountProgramBinding.is_deleted.is_(False)
     ).all()
     for pb in prog_bindings:
         status = "active" if pb.is_active else "inactive"
@@ -84,7 +84,7 @@ def delete_trader(db: Session, trader_id: int) -> Dict[str, Any]:
 
     account = db.query(Account).filter(
         Account.id == trader_id,
-        Account.is_deleted != True
+        Account.is_deleted.is_(False)
     ).first()
     if not account:
         return {"success": False, "error": "Trader not found or already deleted"}
@@ -133,7 +133,7 @@ def check_prompt_template_dependencies(db: Session, prompt_id: int) -> List[str]
 
     bindings = db.query(AccountPromptBinding).filter(
         AccountPromptBinding.prompt_template_id == prompt_id,
-        AccountPromptBinding.is_deleted != True
+        AccountPromptBinding.is_deleted.is_(False)
     ).all()
     for b in bindings:
         acc = db.query(Account).filter(Account.id == b.account_id).first()
@@ -184,7 +184,7 @@ def check_signal_definition_dependencies(db: Session, signal_id: int) -> List[st
     deps = []
 
     pools = db.query(SignalPool).filter(
-        SignalPool.is_deleted != True
+        SignalPool.is_deleted.is_(False)
     ).all()
     for pool in pools:
         try:
@@ -203,7 +203,7 @@ def delete_signal_definition(db: Session, signal_id: int) -> Dict[str, Any]:
 
     sig = db.query(SignalDefinition).filter(
         SignalDefinition.id == signal_id,
-        SignalDefinition.is_deleted != True
+        SignalDefinition.is_deleted.is_(False)
     ).first()
     if not sig:
         return {"success": False, "error": "Signal definition not found or already deleted"}
@@ -253,7 +253,7 @@ def check_signal_pool_dependencies(db: Session, pool_id: int) -> List[str]:
 
     # Check Program Bindings
     bindings = db.query(AccountProgramBinding).filter(
-        AccountProgramBinding.is_deleted != True
+        AccountProgramBinding.is_deleted.is_(False)
     ).all()
     for b in bindings:
         try:
@@ -282,7 +282,7 @@ def delete_signal_pool(db: Session, pool_id: int) -> Dict[str, Any]:
 
     pool = db.query(SignalPool).filter(
         SignalPool.id == pool_id,
-        SignalPool.is_deleted != True
+        SignalPool.is_deleted.is_(False)
     ).first()
     if not pool:
         return {"success": False, "error": "Signal pool not found or already deleted"}
@@ -316,7 +316,7 @@ def check_trading_program_dependencies(db: Session, program_id: int) -> List[str
 
     bindings = db.query(AccountProgramBinding).filter(
         AccountProgramBinding.program_id == program_id,
-        AccountProgramBinding.is_deleted != True
+        AccountProgramBinding.is_deleted.is_(False)
     ).all()
     for b in bindings:
         acc = db.query(Account).filter(Account.id == b.account_id).first()
@@ -333,7 +333,7 @@ def delete_trading_program(db: Session, program_id: int) -> Dict[str, Any]:
 
     prog = db.query(TradingProgram).filter(
         TradingProgram.id == program_id,
-        TradingProgram.is_deleted != True
+        TradingProgram.is_deleted.is_(False)
     ).first()
     if not prog:
         return {"success": False, "error": "Trading program not found or already deleted"}
@@ -361,7 +361,7 @@ def delete_prompt_binding(db: Session, binding_id: int) -> Dict[str, Any]:
 
     binding = db.query(AccountPromptBinding).filter(
         AccountPromptBinding.id == binding_id,
-        AccountPromptBinding.is_deleted != True
+        AccountPromptBinding.is_deleted.is_(False)
     ).first()
     if not binding:
         return {"success": False, "error": "Prompt binding not found or already deleted"}
@@ -388,7 +388,7 @@ def delete_program_binding(db: Session, binding_id: int) -> Dict[str, Any]:
 
     binding = db.query(AccountProgramBinding).filter(
         AccountProgramBinding.id == binding_id,
-        AccountProgramBinding.is_deleted != True
+        AccountProgramBinding.is_deleted.is_(False)
     ).first()
     if not binding:
         return {"success": False, "error": "Program binding not found or already deleted"}

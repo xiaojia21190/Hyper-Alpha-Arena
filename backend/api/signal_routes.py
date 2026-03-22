@@ -750,7 +750,7 @@ def get_ai_signal_conversation_messages(
     api_format = "openai"
     if account_id:
         from database.models import Account
-        acct = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        acct = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if acct and acct.model:
             token_model = acct.model
             from services.ai_decision_service import detect_api_format

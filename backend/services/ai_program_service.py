@@ -8,12 +8,10 @@ Supports Function Calling for AI to query API docs, validate code, and test run.
 import json
 import logging
 import random
-import re
 import requests
 import time
 import traceback
 from typing import Dict, List, Optional, Any, Generator
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -21,9 +19,8 @@ from database.models import (
     AiProgramConversation, AiProgramMessage, TradingProgram, Account,
     BacktestResult, BacktestTriggerLog, AccountProgramBinding
 )
-from services.ai_decision_service import build_chat_completion_endpoints, detect_api_format, _extract_text_from_message, get_max_tokens, build_llm_payload, build_llm_headers, extract_reasoning, convert_tools_to_anthropic, convert_messages_to_anthropic, strip_thinking_tags
+from services.ai_decision_service import build_chat_completion_endpoints, detect_api_format, build_llm_payload, build_llm_headers, extract_reasoning, convert_tools_to_anthropic, convert_messages_to_anthropic, strip_thinking_tags
 from services.ai_stream_service import format_sse_event
-from services.system_logger import system_logger
 from services.ai_shared_tools import (
     SHARED_SIGNAL_TOOLS,
     execute_get_signal_pools,
@@ -861,7 +858,6 @@ def _call_anthropic_streaming(endpoint: str, payload: dict, headers: dict, timeo
 
     content_blocks = []  # Accumulated content blocks
     current_block = None  # Current block being built
-    current_block_index = -1
     stop_reason = None
 
     try:
@@ -902,7 +898,6 @@ def _call_anthropic_streaming(endpoint: str, payload: dict, headers: dict, timeo
 
         if event_type == "content_block_start":
             # New content block starting
-            current_block_index = data.get("index", 0)
             block_data = data.get("content_block", {})
             block_type = block_data.get("type", "")
 
@@ -1257,7 +1252,7 @@ def _get_backtest_history(db: Session, program_id: Optional[int], user_id: int, 
         # Find all bindings for this program (a program can have multiple bindings)
         bindings = db.query(AccountProgramBinding).filter(
             AccountProgramBinding.program_id == program_id,
-            AccountProgramBinding.is_deleted != True
+            AccountProgramBinding.is_deleted.is_(False)
         ).all()
 
         if not bindings:
@@ -1377,25 +1372,25 @@ def _get_trigger_details(db: Session, backtest_id: int, indexes: List[int], fiel
             if "input" in fields and t.decision_input:
                 try:
                     detail["input"] = json.loads(t.decision_input)
-                except:
+                except Exception:
                     detail["input"] = t.decision_input
 
             if "output" in fields and t.decision_output:
                 try:
                     detail["output"] = json.loads(t.decision_output)
-                except:
+                except Exception:
                     detail["output"] = t.decision_output
 
             if "queries" in fields and t.data_queries:
                 try:
                     detail["queries"] = json.loads(t.data_queries)
-                except:
+                except Exception:
                     detail["queries"] = t.data_queries
 
             if "logs" in fields and t.execution_logs:
                 try:
                     detail["logs"] = json.loads(t.execution_logs)
-                except:
+                except Exception:
                     detail["logs"] = t.execution_logs
 
             results.append(detail)
@@ -1440,7 +1435,7 @@ def _quick_verify_strategy(
         symbols = [symbol]
         if signal_pool_id:
             from database.models import SignalPool
-            pool = db.query(SignalPool).filter(SignalPool.id == signal_pool_id, SignalPool.is_deleted != True).first()
+            pool = db.query(SignalPool).filter(SignalPool.id == signal_pool_id, SignalPool.is_deleted.is_(False)).first()
             if pool and pool.symbols:
                 pool_symbols = pool.symbols
                 if isinstance(pool_symbols, str):
@@ -1545,7 +1540,7 @@ def _execute_tool(
                 program = db.query(TradingProgram).filter(
                     TradingProgram.id == program_id,
                     TradingProgram.user_id == user_id,
-                    TradingProgram.is_deleted != True
+                    TradingProgram.is_deleted.is_(False)
                 ).first()
                 if program:
                     return f"Current program: {program.name}\n\n```python\n{program.code}\n```"
@@ -1818,7 +1813,7 @@ def generate_program_with_ai_stream(
             account = db.query(Account).filter(
                 Account.id == account_id,
                 Account.account_type == "AI",
-                Account.is_deleted != True
+                Account.is_deleted.is_(False)
             ).first()
 
             if not account:
@@ -1867,7 +1862,7 @@ def generate_program_with_ai_stream(
             program = db.query(TradingProgram).filter(
                 TradingProgram.id == program_id,
                 TradingProgram.user_id == user_id,
-                TradingProgram.is_deleted != True
+                TradingProgram.is_deleted.is_(False)
             ).first()
             if program:
                 system_prompt += f"""
@@ -1960,9 +1955,6 @@ You are creating a new program. Start fresh and design the strategy based on use
         final_content = ""
         reasoning_snapshot = ""
         code_suggestion = None
-
-        # For Anthropic, we need to track tool_use blocks separately
-        anthropic_tool_use_blocks = []
 
         # Create assistant message upfront with is_complete=False for retry support
         assistant_msg = AiProgramMessage(
@@ -2192,7 +2184,7 @@ You are creating a new program. Start fresh and design the strategy based on use
                                         "description": suggestion.get("description", "")
                                     })
                                     yield format_sse_event("save_suggestion", {"data": suggestion})
-                            except:
+                            except Exception:
                                 pass
 
                         yield format_sse_event("tool_result", {"name": fn_name, "result": result[:500]})
@@ -2247,7 +2239,7 @@ You are creating a new program. Start fresh and design the strategy based on use
                         fn_name = tc["function"]["name"]
                         try:
                             fn_args = json.loads(tc["function"]["arguments"])
-                        except:
+                        except Exception:
                             fn_args = {}
 
                         yield format_sse_event("tool_call", {"name": fn_name, "args": fn_args})
@@ -2266,7 +2258,7 @@ You are creating a new program. Start fresh and design the strategy based on use
                                         "description": suggestion.get("description", "")
                                     })
                                     yield format_sse_event("save_suggestion", {"data": suggestion})
-                            except:
+                            except Exception:
                                 pass
 
                         yield format_sse_event("tool_result", {"name": fn_name, "result": result[:500]})

@@ -13,12 +13,9 @@ import time
 import json
 import math
 import requests
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, List, Optional, Any
 from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR, ROUND_CEILING, InvalidOperation, getcontext
-from eth_account import Account as EthAccount
-from eth_account.messages import encode_defunct, _hash_eip191_message
-from eth_utils import keccak
 
 # Try different function names across eth_account versions
 encode_typed_data_func = None
@@ -297,7 +294,7 @@ class HyperliquidTradingClient:
                 user = db.query(User).filter(User.id == subscription.user_id).first()
                 logger.info(f"[BUILDER FEE] Premium user '{user.username if user else 'unknown'}' detected, using FREE fee: 0%")
             else:
-                logger.info(f"[BUILDER FEE] No premium user logged in, using default fee: 0.03%")
+                logger.info("[BUILDER FEE] No premium user logged in, using default fee: 0.03%")
             db.close()
         except Exception as e:
             logger.warning(f"[BUILDER FEE] Failed to check subscription status: {e}, using default fee")
@@ -372,7 +369,7 @@ class HyperliquidTradingClient:
         """
         from database.models import HyperliquidWallet
 
-        account = db.query(Account).filter(Account.id == self.account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == self.account_id, Account.is_deleted.is_(False)).first()
         if not account:
             raise ValueError(f"Account {self.account_id} not found")
 

@@ -478,7 +478,7 @@ async def get_account_snapshots(
     from database.snapshot_models import HyperliquidAccountSnapshot
 
     # Verify account exists and has Hyperliquid environment configured
-    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -799,7 +799,7 @@ async def get_account_wallet(
 
     try:
         # Check if account exists
-        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if not account:
             raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
 
@@ -888,7 +888,7 @@ async def configure_account_wallet(
             raise HTTPException(status_code=400, detail="Environment must be 'testnet' or 'mainnet'")
 
         # Check if account exists
-        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if not account:
             raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
 
@@ -1089,7 +1089,7 @@ async def delete_account_wallet(
 
     try:
         # Check if account exists
-        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if not account:
             raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
 
@@ -1149,7 +1149,7 @@ async def test_wallet_connection(
     from database.models import Account
 
     try:
-        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if not account:
             raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
 
@@ -1409,7 +1409,7 @@ async def upgrade_wallet_to_agent(
     from eth_account import Account as EthAccount
 
     try:
-        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if not account:
             raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
 
@@ -1479,7 +1479,7 @@ async def upgrade_wallet_to_agent(
 
         return {
             "success": True,
-            "message": f"Wallet upgraded to agent key mode",
+            "message": "Wallet upgraded to agent key mode",
             "agentAddress": agent_address,
             "masterWalletAddress": master_address,
             "agentName": agent_name,
@@ -1510,7 +1510,7 @@ async def configure_agent_wallet(
     from eth_account import Account as EthAccount
 
     try:
-        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if not account:
             raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
 
@@ -1633,7 +1633,7 @@ async def get_agent_wallet_status(
     from database.models import HyperliquidWallet, Account
 
     try:
-        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if not account:
             raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
 
@@ -1707,7 +1707,7 @@ async def check_wallet_upgrade_needed(db: Session = Depends(get_db)):
             Account, HyperliquidWallet.account_id == Account.id
         ).filter(
             HyperliquidWallet.is_active == "true",
-            Account.is_deleted != True,
+            Account.is_deleted.is_(False),
         ).all()
 
         needs_upgrade = []

@@ -114,7 +114,7 @@ async def setup_wallet(
     returns error code 'REBATE_INELIGIBLE' for frontend to show options.
     """
     # Verify account exists
-    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -207,7 +207,7 @@ async def get_config(account_id: int, db: Session = Depends(get_db)):
             if len(api_key) > 8:
                 return f"{api_key[:4]}****{api_key[-4:]}"
             return "****"
-        except:
+        except Exception:
             return "****"
 
     # Get wallet info for each environment
@@ -530,7 +530,7 @@ async def get_all_binance_wallets(db: Session = Depends(get_db)):
 
     result = []
     for wallet in wallets:
-        account = db.query(Account).filter(Account.id == wallet.account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == wallet.account_id, Account.is_deleted.is_(False)).first()
         if not account:
             continue
 
@@ -541,7 +541,7 @@ async def get_all_binance_wallets(db: Session = Depends(get_db)):
                 masked_key = f"{api_key[:4]}****{api_key[-4:]}"
             else:
                 masked_key = "****"
-        except:
+        except Exception:
             masked_key = "****"
 
         result.append({
@@ -693,7 +693,7 @@ async def confirm_limited_binding(
     Called when user chooses "Continue with limited quota" in RebateIneligibleModal.
     """
     # Verify account exists
-    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -807,7 +807,6 @@ async def get_daily_quota(account_id: int, db: Session = Depends(get_db)):
     remaining = max(0, DAILY_QUOTA_LIMIT - used)
 
     # Calculate next reset time (next UTC midnight)
-    from datetime import timedelta
     tomorrow_utc = today_start_utc + timedelta(days=1)
     reset_timestamp = int(tomorrow_utc.timestamp())
 

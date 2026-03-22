@@ -14,7 +14,7 @@ import json
 import logging
 import os
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
@@ -825,8 +825,7 @@ def execute_get_system_overview(db: Session) -> str:
     """Get high-level system status summary."""
     from database.models import (
         Account, HyperliquidWallet, BinanceWallet, PromptTemplate,
-        TradingProgram, SignalPool, AccountPromptBinding, AccountProgramBinding,
-        HyperliquidPosition
+        TradingProgram, SignalPool, AccountPromptBinding, AccountProgramBinding
     )
 
     try:
@@ -852,20 +851,20 @@ def execute_get_system_overview(db: Session) -> str:
             result["wallets"]["binance"][env] = count
 
         # Count AI Traders
-        total_traders = db.query(Account).filter(Account.is_active == "true", Account.is_deleted != True).count()
+        total_traders = db.query(Account).filter(Account.is_active == "true", Account.is_deleted.is_(False)).count()
         active_traders = db.query(Account).filter(
             Account.is_active == "true",
             Account.auto_trading_enabled == "true",
-            Account.is_deleted != True
+            Account.is_deleted.is_(False)
         ).count()
         result["ai_traders"]["total"] = total_traders
         result["ai_traders"]["active"] = active_traders
 
         # Count by strategy type
-        prompt_bindings = db.query(AccountPromptBinding).filter(AccountPromptBinding.is_deleted != True).count()
+        prompt_bindings = db.query(AccountPromptBinding).filter(AccountPromptBinding.is_deleted.is_(False)).count()
         program_bindings = db.query(AccountProgramBinding).filter(
-            AccountProgramBinding.is_active == True,
-            AccountProgramBinding.is_deleted != True
+            AccountProgramBinding.is_active,
+            AccountProgramBinding.is_deleted.is_(False)
         ).count()
         result["ai_traders"]["using_prompt"] = prompt_bindings
         result["ai_traders"]["using_program"] = program_bindings
@@ -875,14 +874,14 @@ def execute_get_system_overview(db: Session) -> str:
             PromptTemplate.is_system == "false",
             PromptTemplate.is_deleted == "false"
         ).count()
-        programs = db.query(TradingProgram).filter(TradingProgram.is_deleted != True).count()
+        programs = db.query(TradingProgram).filter(TradingProgram.is_deleted.is_(False)).count()
         result["strategies"]["prompts"] = user_prompts
         result["strategies"]["programs"] = programs
 
         # Count signal pools by exchange
         pools = db.query(
             SignalPool.exchange, func.count(SignalPool.id)
-        ).filter(SignalPool.enabled == True, SignalPool.is_deleted != True).group_by(SignalPool.exchange).all()
+        ).filter(SignalPool.enabled, SignalPool.is_deleted.is_(False)).group_by(SignalPool.exchange).all()
         for exchange, count in pools:
             result["signal_pools"][exchange or "hyperliquid"] = count
 
@@ -1141,7 +1140,7 @@ def execute_get_market_flow(db: Session, symbol: str, period: str = "1h", exchan
 def execute_get_system_logs(db: Session, level: str = "error", limit: int = 20, trader_id: int = None) -> str:
     """Get recent system logs enriched with error registry metadata."""
     from services.system_logger import system_logger
-    from services.error_registry import classify_error, get_severity_summary
+    from services.error_registry import classify_error
 
     try:
         limit = min(max(limit, 1), 50)
@@ -1339,13 +1338,12 @@ def execute_diagnose_trader_issues(db: Session, trader_id: int) -> str:
     """Diagnose why an AI Trader is not triggering."""
     from database.models import (
         Account, HyperliquidWallet, BinanceWallet, AccountPromptBinding,
-        AccountProgramBinding, AccountStrategyConfig, SignalPool,
-        HyperliquidAccountSnapshot, BinanceAccountSnapshot, AIDecisionLog, ProgramExecutionLog
+        AccountProgramBinding, AccountStrategyConfig, HyperliquidAccountSnapshot, BinanceAccountSnapshot, AIDecisionLog
     )
 
     try:
         # Get account
-        account = db.query(Account).filter(Account.id == trader_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == trader_id, Account.is_deleted.is_(False)).first()
         if not account:
             return json.dumps({"error": f"AI Trader with id {trader_id} not found"})
 
@@ -1367,12 +1365,12 @@ def execute_diagnose_trader_issues(db: Session, trader_id: int) -> str:
         # Check 3: Strategy bound
         prompt_binding = db.query(AccountPromptBinding).filter(
             AccountPromptBinding.account_id == trader_id,
-            AccountPromptBinding.is_deleted != True
+            AccountPromptBinding.is_deleted.is_(False)
         ).first()
         program_binding = db.query(AccountProgramBinding).filter(
             AccountProgramBinding.account_id == trader_id,
-            AccountProgramBinding.is_active == True,
-            AccountProgramBinding.is_deleted != True
+            AccountProgramBinding.is_active,
+            AccountProgramBinding.is_deleted.is_(False)
         ).first()
 
         strategy_bound = prompt_binding is not None or program_binding is not None
@@ -1756,7 +1754,7 @@ def execute_list_traders(db: Session, trader_id: int = None) -> str:
         query = db.query(Account).filter(
             Account.is_active == "true",
             Account.account_type == "AI",
-            Account.is_deleted != True
+            Account.is_deleted.is_(False)
         )
         if trader_id:
             query = query.filter(Account.id == trader_id)
@@ -1790,7 +1788,7 @@ def execute_list_traders(db: Session, trader_id: int = None) -> str:
             prompt_binding = None
             pb = db.query(AccountPromptBinding).filter(
                 AccountPromptBinding.account_id == acc.id,
-                AccountPromptBinding.is_deleted != True
+                AccountPromptBinding.is_deleted.is_(False)
             ).first()
             if pb:
                 tpl = db.get(PromptTemplate, pb.prompt_template_id)
@@ -1802,7 +1800,7 @@ def execute_list_traders(db: Session, trader_id: int = None) -> str:
             # Program bindings
             prog_bindings = db.query(AccountProgramBinding).filter(
                 AccountProgramBinding.account_id == acc.id,
-                AccountProgramBinding.is_deleted != True
+                AccountProgramBinding.is_deleted.is_(False)
             ).all()
             program_bindings = []
             for pgb in prog_bindings:
@@ -1840,7 +1838,7 @@ def execute_list_signal_pools(db: Session, pool_id: int = None) -> str:
     from database.models import SignalPool, SignalDefinition
 
     try:
-        query = db.query(SignalPool).filter(SignalPool.is_deleted != True)
+        query = db.query(SignalPool).filter(SignalPool.is_deleted.is_(False))
         if pool_id:
             query = query.filter(SignalPool.id == pool_id)
         pools = query.all()
@@ -1872,7 +1870,7 @@ def execute_list_signal_pools(db: Session, pool_id: int = None) -> str:
             for sid in signal_ids:
                 sig = db.query(SignalDefinition).filter(
                     SignalDefinition.id == sid,
-                    SignalDefinition.is_deleted != True
+                    SignalDefinition.is_deleted.is_(False)
                 ).first()
                 if sig:
                     cond = {}
@@ -1926,7 +1924,7 @@ def execute_list_strategies(db: Session, strategy_id: int = None, strategy_type:
                     return json.dumps({"error": f"Prompt {strategy_id} not found"})
                 bindings = db.query(AccountPromptBinding).filter(
                     AccountPromptBinding.prompt_template_id == tpl.id,
-                    AccountPromptBinding.is_deleted != True
+                    AccountPromptBinding.is_deleted.is_(False)
                 ).all()
                 bound_traders = []
                 for b in bindings:
@@ -1943,13 +1941,13 @@ def execute_list_strategies(db: Session, strategy_id: int = None, strategy_type:
             elif strategy_type == "program":
                 prog = db.query(TradingProgram).filter(
                     TradingProgram.id == strategy_id,
-                    TradingProgram.is_deleted != True
+                    TradingProgram.is_deleted.is_(False)
                 ).first()
                 if not prog:
                     return json.dumps({"error": f"Program {strategy_id} not found"})
                 bindings = db.query(AccountProgramBinding).filter(
                     AccountProgramBinding.program_id == prog.id,
-                    AccountProgramBinding.is_deleted != True
+                    AccountProgramBinding.is_deleted.is_(False)
                 ).all()
                 bound_traders = []
                 for b in bindings:
@@ -1976,7 +1974,7 @@ def execute_list_strategies(db: Session, strategy_id: int = None, strategy_type:
         for tpl in templates:
             bindings = db.query(AccountPromptBinding).filter(
                 AccountPromptBinding.prompt_template_id == tpl.id,
-                AccountPromptBinding.is_deleted != True
+                AccountPromptBinding.is_deleted.is_(False)
             ).all()
             bound_traders = []
             for b in bindings:
@@ -1991,12 +1989,12 @@ def execute_list_strategies(db: Session, strategy_id: int = None, strategy_type:
             })
 
         # Programs
-        programs_db = db.query(TradingProgram).filter(TradingProgram.is_deleted != True).all()
+        programs_db = db.query(TradingProgram).filter(TradingProgram.is_deleted.is_(False)).all()
         programs = []
         for prog in programs_db:
             bindings = db.query(AccountProgramBinding).filter(
                 AccountProgramBinding.program_id == prog.id,
-                AccountProgramBinding.is_deleted != True
+                AccountProgramBinding.is_deleted.is_(False)
             ).all()
             bound_traders = []
             for b in bindings:
@@ -2036,7 +2034,7 @@ def execute_bind_prompt_to_trader(db: Session, trader_id: int, prompt_id: int) -
     from repositories import prompt_repo
 
     try:
-        account = db.query(Account).filter(Account.id == trader_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == trader_id, Account.is_deleted.is_(False)).first()
         if not account:
             return json.dumps({"error": f"AI Trader {trader_id} not found"})
 
@@ -2081,7 +2079,7 @@ def _validate_signal_pool_exchange_consistency(
     # Get signal pool exchanges
     pools = db.query(SignalPool).filter(
         SignalPool.id.in_(signal_pool_ids),
-        SignalPool.is_deleted != True
+        SignalPool.is_deleted.is_(False)
     ).all()
 
     # Check for mismatches
@@ -2117,7 +2115,7 @@ def execute_bind_program_to_trader(
     from database.models import Account, TradingProgram, AccountProgramBinding
 
     try:
-        account = db.query(Account).filter(Account.id == trader_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == trader_id, Account.is_deleted.is_(False)).first()
         if not account:
             return json.dumps({"error": f"AI Trader {trader_id} not found"})
 
@@ -2135,7 +2133,7 @@ def execute_bind_program_to_trader(
         existing = db.query(AccountProgramBinding).filter(
             AccountProgramBinding.account_id == trader_id,
             AccountProgramBinding.program_id == program_id,
-            AccountProgramBinding.is_deleted != True
+            AccountProgramBinding.is_deleted.is_(False)
         ).first()
         if existing:
             return json.dumps({
@@ -2185,11 +2183,11 @@ def execute_update_trader_strategy(
     from repositories.strategy_repo import upsert_strategy
 
     try:
-        account = db.query(Account).filter(Account.id == trader_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == trader_id, Account.is_deleted.is_(False)).first()
         if not account:
             return json.dumps({"error": f"AI Trader {trader_id} not found"})
 
-        strategy = upsert_strategy(
+        upsert_strategy(
             db,
             account_id=trader_id,
             signal_pool_ids=signal_pool_ids,
@@ -2229,7 +2227,7 @@ def execute_update_ai_trader(
     try:
         account = db.query(Account).filter(
             Account.id == trader_id, Account.is_active == "true",
-            Account.is_deleted != True
+            Account.is_deleted.is_(False)
         ).first()
         if not account:
             return json.dumps({"error": f"AI Trader {trader_id} not found"})
@@ -2301,7 +2299,7 @@ def execute_update_program_binding(
     try:
         binding = db.query(AccountProgramBinding).filter(
             AccountProgramBinding.id == binding_id,
-            AccountProgramBinding.is_deleted != True
+            AccountProgramBinding.is_deleted.is_(False)
         ).first()
         if not binding:
             return json.dumps({"error": f"Program binding {binding_id} not found"})
@@ -2346,7 +2344,7 @@ def execute_update_signal_pool(
     from database.models import SignalPool, SignalDefinition
 
     try:
-        pool = db.query(SignalPool).filter(SignalPool.id == pool_id, SignalPool.is_deleted != True).first()
+        pool = db.query(SignalPool).filter(SignalPool.id == pool_id, SignalPool.is_deleted.is_(False)).first()
         if not pool:
             return json.dumps({"error": f"Signal pool {pool_id} not found"})
 
@@ -2357,7 +2355,7 @@ def execute_update_signal_pool(
             pool_exchange = pool.exchange or "hyperliquid"
             mismatched = []
             for sid in signal_ids:
-                sig = db.query(SignalDefinition).filter(SignalDefinition.id == sid, SignalDefinition.is_deleted != True).first()
+                sig = db.query(SignalDefinition).filter(SignalDefinition.id == sid, SignalDefinition.is_deleted.is_(False)).first()
                 if not sig:
                     return json.dumps({"error": f"Signal definition {sid} not found"})
                 sig_exchange = sig.exchange or "hyperliquid"
@@ -2399,7 +2397,7 @@ def execute_update_prompt_binding(db: Session, trader_id: int, prompt_id: int) -
     from repositories import prompt_repo
 
     try:
-        account = db.query(Account).filter(Account.id == trader_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == trader_id, Account.is_deleted.is_(False)).first()
         if not account:
             return json.dumps({"error": f"AI Trader {trader_id} not found"})
 
@@ -2479,7 +2477,7 @@ def execute_query_factors(
     days: int = 30
 ) -> str:
     """Query factor library, values, and effectiveness."""
-    from services.factor_registry import FACTOR_REGISTRY, CATEGORY_LABELS
+    from services.factor_registry import FACTOR_REGISTRY
     from database.models import CustomFactor
 
     try:
@@ -2576,7 +2574,7 @@ def execute_query_factors(
             }, indent=2)
 
         # No symbol: return factor library
-        custom_rows = db.query(CustomFactor).filter(CustomFactor.is_active == True).all()
+        custom_rows = db.query(CustomFactor).filter(CustomFactor.is_active).all()
         factors = [
             {"name": f["name"], "category": f["category"], "source": "builtin",
              "display_name": f.get("display_name", f["name"])}

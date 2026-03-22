@@ -85,8 +85,8 @@ def list_bindings(db: Session) -> List[Tuple[AccountPromptBinding, Account, Prom
         select(AccountPromptBinding, Account, PromptTemplate)
         .join(Account, AccountPromptBinding.account_id == Account.id)
         .join(PromptTemplate, AccountPromptBinding.prompt_template_id == PromptTemplate.id)
-        .where(Account.is_deleted != True)
-        .where(AccountPromptBinding.is_deleted != True)
+        .where(Account.is_deleted.is_(False))
+        .where(AccountPromptBinding.is_deleted.is_(False))
         .order_by(Account.name.asc())
     )
     return list(db.execute(statement).all())
@@ -95,7 +95,7 @@ def list_bindings(db: Session) -> List[Tuple[AccountPromptBinding, Account, Prom
 def get_binding_by_account(db: Session, account_id: int, include_deleted: bool = False) -> Optional[AccountPromptBinding]:
     statement = select(AccountPromptBinding).where(AccountPromptBinding.account_id == account_id)
     if not include_deleted:
-        statement = statement.where(AccountPromptBinding.is_deleted != True)
+        statement = statement.where(AccountPromptBinding.is_deleted.is_(False))
     return db.execute(statement).scalar_one_or_none()
 
 
@@ -252,7 +252,7 @@ def soft_delete_template(db: Session, template_id: int) -> None:
     binding = db.execute(
         select(AccountPromptBinding).where(
             AccountPromptBinding.prompt_template_id == template_id,
-            AccountPromptBinding.is_deleted != True
+            AccountPromptBinding.is_deleted.is_(False)
         )
     ).scalar_one_or_none()
 

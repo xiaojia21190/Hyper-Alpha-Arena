@@ -4,14 +4,13 @@ Account and Asset Curve API Routes (Cleaned)
 
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import List, Optional
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 import logging
 
 from database.connection import SessionLocal
-from database.models import Account, Position, Trade, CryptoPrice, AccountAssetSnapshot, HyperliquidWallet, AccountPromptBinding
+from database.models import Account, Position, Trade, AccountAssetSnapshot, HyperliquidWallet, AccountPromptBinding
 from services.asset_curve_calculator import invalidate_asset_curve_cache
 from services.ai_decision_service import build_chat_completion_endpoints, detect_api_format, _extract_text_from_message
 from schemas.account import StrategyConfig, StrategyConfigUpdate
@@ -81,7 +80,7 @@ def _serialize_strategy(account: Account, strategy, db: Session = None) -> Strat
     if has_trigger_enabled and db:
         prompt_binding = db.query(AccountPromptBinding).filter(
             AccountPromptBinding.account_id == account.id,
-            AccountPromptBinding.is_deleted != True
+            AccountPromptBinding.is_deleted.is_(False)
         ).first()
         if not prompt_binding:
             warning = "No prompt template bound. Scheduled and signal triggers will not execute until a prompt is configured."
@@ -116,9 +115,9 @@ async def list_all_accounts(include_hidden: bool = False, db: Session = Depends(
         from eth_account import Account as EthAccount
         from services.hyperliquid_environment import decrypt_private_key
 
-        query = db.query(Account).filter(Account.is_active == "true", Account.is_deleted != True)
+        query = db.query(Account).filter(Account.is_active == "true", Account.is_deleted.is_(False))
         if not include_hidden:
-            query = query.filter(Account.show_on_dashboard == True)
+            query = query.filter(Account.show_on_dashboard)
         accounts = query.all()
 
         result = []
@@ -228,7 +227,7 @@ async def get_specific_account_overview(account_id: int, db: Session = Depends(g
         account = db.query(Account).filter(
             Account.id == account_id,
             Account.is_active == "true",
-            Account.is_deleted != True
+            Account.is_deleted.is_(False)
         ).first()
         
         if not account:
@@ -275,7 +274,7 @@ async def get_account_strategy(account_id: int, db: Session = Depends(get_db)):
     """Fetch AI trading strategy configuration for an account."""
     account = (
         db.query(Account)
-        .filter(Account.id == account_id, Account.is_active == "true", Account.is_deleted != True)
+        .filter(Account.id == account_id, Account.is_active == "true", Account.is_deleted.is_(False))
         .first()
     )
     if not account:
@@ -314,7 +313,7 @@ async def update_account_strategy(
     print(f"Backend received payload for account {account_id}: {payload}")
     account = (
         db.query(Account)
-        .filter(Account.id == account_id, Account.is_active == "true", Account.is_deleted != True)
+        .filter(Account.id == account_id, Account.is_active == "true", Account.is_deleted.is_(False))
         .first()
     )
     if not account:
@@ -364,7 +363,7 @@ async def get_account_overview(db: Session = Depends(get_db)):
     """Get overview for the default account (for paper trading demo)"""
     try:
         # Get the first active account (default account)
-        account = db.query(Account).filter(Account.is_active == "true", Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.is_active == "true", Account.is_deleted.is_(False)).first()
         
         if not account:
             raise HTTPException(status_code=404, detail="No active account found")
@@ -523,7 +522,7 @@ async def update_account_settings(account_id: int, payload: dict, db: Session = 
         account = db.query(Account).filter(
             Account.id == account_id,
             Account.is_active == "true",
-            Account.is_deleted != True
+            Account.is_deleted.is_(False)
         ).first()
 
         if not account:
@@ -662,7 +661,7 @@ async def get_asset_curve_by_timeframe(
         period = timeframe_map[timeframe]
         
         # Get all active accounts
-        accounts = db.query(Account).filter(Account.is_active == "true", Account.is_deleted != True).all()
+        accounts = db.query(Account).filter(Account.is_active == "true", Account.is_deleted.is_(False)).all()
         if not accounts:
             return []
         
@@ -1028,7 +1027,7 @@ async def trigger_ai_trade(
         from services.trading_commands import place_ai_driven_crypto_order
 
         # Validate account exists and is active
-        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if not account:
             raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
 
@@ -1036,7 +1035,7 @@ async def trigger_ai_trade(
             raise HTTPException(status_code=400, detail=f"Account {account.name} is inactive")
 
         if account.account_type != "AI":
-            raise HTTPException(status_code=400, detail=f"Only AI accounts can trigger AI trading")
+            raise HTTPException(status_code=400, detail="Only AI accounts can trigger AI trading")
 
         logger.info(f"Manually triggering AI trade for account {account.name} (ID: {account_id})")
         if force_operation:
@@ -1108,10 +1107,10 @@ async def trigger_ai_trade(
 
         # Trigger AI trading based on account configuration
         if hyperliquid_environment in ["testnet", "mainnet"]:
-            print(f"[DEBUG] ENTERING HYPERLIQUID BRANCH")
+            print("[DEBUG] ENTERING HYPERLIQUID BRANCH")
             try:
                 from services.trading_commands import place_ai_driven_hyperliquid_order
-                print(f"[DEBUG] Successfully imported place_ai_driven_hyperliquid_order")
+                print("[DEBUG] Successfully imported place_ai_driven_hyperliquid_order")
                 print(f"[DEBUG] Calling place_ai_driven_hyperliquid_order for account {account_id}")
                 place_ai_driven_hyperliquid_order(
                     account_id=account_id,
@@ -1260,7 +1259,7 @@ async def approve_builder_fee(
         from services.hyperliquid_environment import get_hyperliquid_client
 
         # Get account
-        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if not account:
             print(f"[BUILDER_AUTH] ERROR: Account {account_id} not found")
             raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
@@ -1442,7 +1441,7 @@ async def check_mainnet_accounts(
             Account.auto_trading_enabled == "true",
             Account.hyperliquid_mainnet_private_key.isnot(None),
             Account.hyperliquid_mainnet_private_key != "",
-            Account.is_deleted != True
+            Account.is_deleted.is_(False)
         ).all()
 
         # Filter out accounts already checked via wallets table
@@ -1543,7 +1542,7 @@ async def disable_trading(
     """
     try:
         # Get account
-        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+        account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
         if not account:
             raise HTTPException(
                 status_code=404,
@@ -1596,7 +1595,7 @@ async def update_dashboard_visibility(
             account_id = item.get("account_id")
             show = item.get("show_on_dashboard", True)
 
-            account = db.query(Account).filter(Account.id == account_id, Account.is_deleted != True).first()
+            account = db.query(Account).filter(Account.id == account_id, Account.is_deleted.is_(False)).first()
             if account:
                 account.show_on_dashboard = show
                 updated.append({"account_id": account_id, "show_on_dashboard": show})

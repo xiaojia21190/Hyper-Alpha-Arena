@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import datetime
 from sqlalchemy.orm import Session
 
 from database.connection import SessionLocal
@@ -57,7 +56,7 @@ class HyperliquidSnapshotService:
             ).filter(
                 Account.is_active == "true",
                 Account.account_type == "AI",
-                Account.is_deleted != True,
+                Account.is_deleted.is_(False),
                 HyperliquidWallet.environment == global_environment,
                 HyperliquidWallet.is_active == "true"
             ).distinct().all()
