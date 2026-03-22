@@ -5,9 +5,6 @@ const API_BASE_URL = process.env.NODE_ENV === 'production'
   ? '/api'
   : '/api'  // Use proxy, don't hardcode port
 
-// Hardcoded user for paper trading (matches backend initialization)
-const HARDCODED_USERNAME = 'default'
-
 // Helper function for making API requests
 export async function apiRequest(
   endpoint: string, 
