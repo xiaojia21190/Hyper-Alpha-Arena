@@ -168,6 +168,165 @@ docker compose up -d --build # (or docker-compose up -d --build)
 - Data will be preserved when you stop/restart containers
 - Only `docker-compose down -v` will delete data (don't use `-v` flag unless you want to reset everything)
 
+## Automated Factor Portfolio (Server Commands)
+
+This is the full workflow command set for:
+
+`factor research -> factor portfolio ranking -> pick best portfolio -> deploy to paper`
+
+### One-command smoke (already includes research + best portfolio + paper deploy)
+
+```bash
+# 1) Start services
+docker compose up -d --build
+
+# 2) Create a paper test account and capture account_id
+PAPER_ACCOUNT_ID=$(curl -sS -X POST "http://127.0.0.1:8802/api/account/" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"paper-smoke-account","account_type":"AI","initial_capital":10000,"auto_trading_enabled":false}' \
+  | python -c "import sys, json; print(json.load(sys.stdin)['id'])")
+
+# 3) Trigger factor research, wait for completion, pick top portfolio, deploy paper
+docker compose exec app sh -lc "cd /app/backend && python scripts/factor_portfolio_smoke.py --base-url http://127.0.0.1:8802 --trigger-run --top-n-symbols 3 --lookback-days 7 --prescreen-limit 2 --wait-timeout 180 --poll-seconds 2 --deploy-paper-account-id ${PAPER_ACCOUNT_ID}"
+```
+
+### One-command self-check (research -> paper -> auto-live gate decision)
+
+```bash
+bash -lc '
+set -euo pipefail
+BASE_URL="http://127.0.0.1:8802"
+
+docker compose up -d --build
+
+PAPER_ACCOUNT_ID=$(curl -sS -X POST "${BASE_URL}/api/account/" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"paper-auto-gate\",\"account_type\":\"AI\",\"initial_capital\":10000,\"auto_trading_enabled\":false}" \
+  | python -c "import sys,json; print(json.load(sys.stdin)[\"id\"])")
+
+LIVE_ACCOUNT_ID=$(curl -sS -X POST "${BASE_URL}/api/account/" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"live-auto-gate\",\"account_type\":\"AI\",\"initial_capital\":10000,\"auto_trading_enabled\":false}" \
+  | python -c "import sys,json; print(json.load(sys.stdin)[\"id\"])")
+
+curl -sS -X POST "${BASE_URL}/api/factor-research/run" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"exchange\":\"hyperliquid\",
+    \"top_n_symbols\":20,
+    \"lookback_days\":180,
+    \"objective\":\"return_over_drawdown\",
+    \"factor_scope\":\"builtin_only\",
+    \"period\":\"1h\",
+    \"prescreen_limit\":10,
+    \"auto_promote_paper\":true,
+    \"paper_account_id\":${PAPER_ACCOUNT_ID},
+    \"auto_promote_live\":true,
+    \"live_account_id\":${LIVE_ACCOUNT_ID},
+    \"live_min_observation_hours\":24,
+    \"live_min_trades\":10,
+    \"live_min_net_pnl\":0,
+    \"live_min_win_rate\":50,
+    \"live_max_drawdown_percent\":20
+  }" >/dev/null
+
+echo "Waiting for run completion..."
+for i in $(seq 1 120); do
+  STATUS_JSON=$(curl -sS "${BASE_URL}/api/factor-research/status")
+  STATUS=$(printf "%s" "$STATUS_JSON" | python -c "import sys,json; print(json.load(sys.stdin).get(\"status\"))")
+  LAST=$(printf "%s" "$STATUS_JSON" | python -c "import sys,json; print(json.load(sys.stdin).get(\"last_run_status\"))")
+  if [ "$STATUS" = "idle" ] && { [ "$LAST" = "success" ] || [ "$LAST" = "error" ]; }; then
+    break
+  fi
+  sleep 5
+done
+
+curl -sS "${BASE_URL}/api/factor-research/status"
+'
+```
+
+### Continuous automatic loop (scheduled)
+
+Set these in `docker-compose.yml` under `services.app.environment`:
+
+```env
+FACTOR_RESEARCH_ENABLED=true
+FACTOR_RESEARCH_RUN_ON_STARTUP=true
+FACTOR_RESEARCH_INTERVAL_SECONDS=21600
+FACTOR_RESEARCH_AUTO_PROMOTE_PAPER=true
+FACTOR_RESEARCH_PAPER_ACCOUNT_ID=1
+FACTOR_RESEARCH_AUTO_PROMOTE_LIVE=true
+FACTOR_RESEARCH_LIVE_ACCOUNT_ID=2
+FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS=24
+FACTOR_RESEARCH_LIVE_MIN_TRADES=10
+FACTOR_RESEARCH_LIVE_MIN_NET_PNL=0
+FACTOR_RESEARCH_LIVE_MIN_WIN_RATE=50
+FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT=20
+FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM=true
+```
+
+Then restart:
+
+```bash
+docker compose up -d --build
+```
+
+### Observe paper performance (step 6)
+
+```bash
+# Current automation status
+curl -sS "http://127.0.0.1:8802/api/factor-research/status"
+
+# Latest best portfolio result
+curl -sS "http://127.0.0.1:8802/api/factor-portfolios/latest"
+
+# Deployment records for account
+curl -sS "http://127.0.0.1:8802/api/factor-portfolios/deployments?account_id=1&limit=20"
+
+# PnL/fee/win-rate summary for this account
+curl -sS "http://127.0.0.1:8802/api/analytics/summary?account_id=1&environment=all&exchange=all"
+
+# Asset curve for drawdown/stability review
+curl -sS "http://127.0.0.1:8802/api/account/asset-curve?account_id=1&timeframe=1h&trading_mode=testnet"
+```
+
+### Auto live decision gate (step 7, automatic)
+
+The scheduler can auto-decide whether to promote to live based on paper metrics:
+
+- `net_pnl >= FACTOR_RESEARCH_LIVE_MIN_NET_PNL`
+- `max_drawdown_percent <= FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT`
+- `win_rate_percent >= FACTOR_RESEARCH_LIVE_MIN_WIN_RATE`
+- `trade_count >= FACTOR_RESEARCH_LIVE_MIN_TRADES`
+- `observation_hours >= FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS`
+
+If all checks pass, the best portfolio is auto-deployed to `FACTOR_RESEARCH_LIVE_ACCOUNT_ID`.
+
+### One-shot API command (paper + auto-live decision)
+
+```bash
+curl -sS -X POST "http://127.0.0.1:8802/api/factor-research/run" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "exchange":"hyperliquid",
+    "top_n_symbols":20,
+    "lookback_days":180,
+    "objective":"return_over_drawdown",
+    "factor_scope":"builtin_only",
+    "period":"1h",
+    "prescreen_limit":10,
+    "auto_promote_paper":true,
+    "paper_account_id":1,
+    "auto_promote_live":true,
+    "live_account_id":2,
+    "live_min_observation_hours":24,
+    "live_min_trades":10,
+    "live_min_net_pnl":0,
+    "live_min_win_rate":50,
+    "live_max_drawdown_percent":20
+  }'
+```
+
 ## First-Time Setup
 
 For detailed setup instructions including:
