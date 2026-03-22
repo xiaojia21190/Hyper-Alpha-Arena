@@ -30,6 +30,9 @@ def compute_factor_snapshot(
     """
     from database.models import CustomFactor
     from services.factor_expression_engine import factor_expression_engine
+    from services.factor_registry import FACTOR_REGISTRY
+    from services.factor_effectiveness_service import FactorEffectivenessService
+    from services.technical_indicators import calculate_indicators
     from sqlalchemy import text as sa_text
     import pandas as pd
 
@@ -40,29 +43,56 @@ def compute_factor_snapshot(
         "value": None,
     }
 
-    factor = db.query(CustomFactor).filter(
-        CustomFactor.name == factor_name,
-        CustomFactor.is_active == True
-    ).first()
-    if not factor:
-        result["error"] = f"Factor '{factor_name}' not found"
-        return result
+    builtin_factor = next((row for row in FACTOR_REGISTRY if row["name"] == factor_name), None)
+    factor = None
+    if builtin_factor is None:
+        factor = db.query(CustomFactor).filter(
+            CustomFactor.name == factor_name,
+            CustomFactor.is_active
+        ).first()
+        if not factor:
+            result["error"] = f"Factor '{factor_name}' not found"
+            return result
 
-    result["id"] = factor.id
-    result["expression"] = factor.expression
-    result["description"] = factor.description or ""
-    result["category"] = factor.category
+        result["id"] = factor.id
+        result["expression"] = factor.expression
+        result["description"] = factor.description or ""
+        result["category"] = factor.category
+    else:
+        result["description"] = builtin_factor.get("description", "")
+        result["category"] = builtin_factor.get("category", "builtin")
 
     try:
         klines = klines_loader(period, 500)
         if klines and len(klines) >= 30:
-            series, err = factor_expression_engine.execute(factor.expression, klines)
-            if series is not None and len(series) > 0:
-                last_val = series.iloc[-1]
-                if not pd.isna(last_val):
-                    result["value"] = round(float(last_val), 6)
-            elif err:
-                result["error"] = err
+            if builtin_factor is not None:
+                indicators = {}
+                if builtin_factor.get("compute_type") == "technical":
+                    indicator_key = builtin_factor.get("indicator_key")
+                    if indicator_key:
+                        indicators = calculate_indicators(klines, [indicator_key])
+
+                series = FactorEffectivenessService()._extract_full_series(
+                    builtin_factor,
+                    indicators,
+                    klines,
+                    len(klines),
+                    db,
+                    symbol,
+                    exchange,
+                )
+                if series:
+                    last_val = series[-1]
+                    if not pd.isna(last_val):
+                        result["value"] = round(float(last_val), 6)
+            else:
+                series, err = factor_expression_engine.execute(factor.expression, klines)
+                if series is not None and len(series) > 0:
+                    last_val = series.iloc[-1]
+                    if not pd.isna(last_val):
+                        result["value"] = round(float(last_val), 6)
+                elif err:
+                    result["error"] = err
     except Exception as e:
         result["error"] = str(e)
         return result
@@ -615,7 +645,7 @@ class DataProvider:
             factor_names = [r[0] for r in rows]
             factors = self.db.query(CustomFactor).filter(
                 CustomFactor.name.in_(factor_names),
-                CustomFactor.is_active == True
+                CustomFactor.is_active
             ).all()
             factor_meta = {f.name: f for f in factors}
 

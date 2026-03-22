@@ -7,9 +7,8 @@ Manages virtual account state during backtesting:
 - Pending orders (TP/SL)
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
-from copy import deepcopy
 
 
 @dataclass

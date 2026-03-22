@@ -4,12 +4,10 @@ Provides K-line data database operations
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, text
+from sqlalchemy import and_
 from typing import List, Optional, Tuple
 from database.models import CryptoKline
-from database.connection import get_db
 import time
-import ccxt
 
 
 class KlineRepository:
@@ -251,14 +249,6 @@ class KlineRepository:
         This is a placeholder - actual implementation depends on exchange API
         """
         if exchange == "hyperliquid":
-            # Use existing hyperliquid market data service
-            from services.hyperliquid_market_data import HyperliquidMarketData
-            market_data = HyperliquidMarketData()
-
-            # Convert timestamps to milliseconds for API
-            since_ms = start_ts * 1000
-            limit = min(1000, (end_ts - start_ts) // self._period_to_seconds(period))
-
             # Fetch data (this would need to be implemented in HyperliquidMarketData)
             # kline_data = market_data.get_historical_klines(symbol, period, since_ms, limit)
             # self.save_kline_data(symbol, "CRYPTO", period, kline_data, exchange)

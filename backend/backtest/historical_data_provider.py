@@ -32,6 +32,7 @@ class HistoricalDataProvider:
         start_time_ms: int,
         end_time_ms: int,
         exchange: str = "hyperliquid",
+        preload_periods: Optional[List[str]] = None,
     ):
         """
         Initialize historical data provider.
@@ -49,6 +50,7 @@ class HistoricalDataProvider:
         self.end_time_ms = end_time_ms
         self.current_time_ms = start_time_ms
         self.exchange = exchange
+        self.preload_periods = preload_periods or ["1m", "5m", "15m", "1h", "4h", "1d"]
 
         # Caches
         self._kline_cache: Dict[str, List[Dict]] = {}
@@ -66,8 +68,7 @@ class HistoricalDataProvider:
         logger.info(f"Preloading data for {len(self.symbols)} symbols...")
 
         for symbol in self.symbols:
-            # Preload common periods (1m for price accuracy, others for indicators)
-            for period in ["1m", "5m", "15m", "1h", "4h", "1d"]:
+            for period in self.preload_periods:
                 self._load_klines_to_cache(symbol, period)
 
         logger.info(f"Preload complete. Cache size: {len(self._kline_cache)} entries")
@@ -122,7 +123,8 @@ class HistoricalDataProvider:
 
         Priority:
         1. market_asset_metrics.mark_price (15-second granularity, most accurate)
-        2. 1m kline close price (fallback)
+        2. 1m kline close price
+        3. 1h kline close price (fallback for low-query backtests)
         """
         # Try market_asset_metrics first (15-second granularity)
         try:
@@ -138,31 +140,47 @@ class HistoricalDataProvider:
         except Exception as e:
             logger.debug(f"Failed to get mark_price for {symbol}: {e}")
 
-        # Fallback to 1m kline close price
         timestamp_sec = timestamp_ms // 1000
-        cache_key = f"{symbol}_1m"
+        for period in ["1m", "1h"]:
+            price = self._get_price_from_kline_period(symbol, timestamp_sec, period)
+            if price is not None:
+                return price
+
+        return None
+
+    def _get_price_from_kline_period(
+        self,
+        symbol: str,
+        timestamp_sec: int,
+        period: str,
+    ) -> Optional[float]:
+        cache_key = f"{symbol}_{period}"
 
         if cache_key in self._kline_cache:
             klines = self._kline_cache[cache_key]
-            for k in reversed(klines):
-                if k["timestamp"] <= timestamp_sec:
-                    return k["close"]
+            for kline in reversed(klines):
+                if kline["timestamp"] <= timestamp_sec:
+                    return float(kline["close"])
             if klines:
-                return klines[0]["close"]
+                return float(klines[0]["close"])
 
-        # Final fallback: DB query for kline
         try:
             result = self.db.execute(text("""
                 SELECT close_price FROM crypto_klines
-                WHERE symbol = :symbol AND period = '1m' AND exchange = :exchange
+                WHERE symbol = :symbol AND period = :period AND exchange = :exchange
                 AND timestamp <= :ts
                 ORDER BY timestamp DESC LIMIT 1
-            """), {"symbol": symbol, "exchange": self.exchange, "ts": timestamp_sec})
+            """), {
+                "symbol": symbol,
+                "period": period,
+                "exchange": self.exchange,
+                "ts": timestamp_sec,
+            })
             row = result.fetchone()
             if row:
                 return float(row[0])
         except Exception as e:
-            logger.warning(f"Failed to get price for {symbol}: {e}")
+            logger.warning(f"Failed to get {period} price for {symbol}: {e}")
 
         return None
 
@@ -768,4 +786,3 @@ class HistoricalDataProvider:
         ]
 
         return result
-

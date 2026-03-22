@@ -5,7 +5,6 @@ import ccxt
 import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -103,72 +102,9 @@ class HyperliquidClient:
     def get_ticker_data(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Get complete ticker data using Hyperliquid native API"""
         try:
-            import requests
-
-            # Use environment-specific API endpoint
-            if self.environment == "testnet":
-                api_url = "https://api.hyperliquid-testnet.xyz/info"
-            else:
-                api_url = "https://api.hyperliquid.xyz/info"
-
-            # Use Hyperliquid native API for complete market data
-            response = requests.post(
-                api_url,
-                json={"type": "metaAndAssetCtxs"},
-                timeout=10
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            if not isinstance(data, list) or len(data) < 2:
-                raise Exception("Invalid API response structure")
-
-            # Find symbol index in universe (meta data)
-            symbol_upper = symbol.upper()
-            symbol_index = None
-
-            if isinstance(data[0], dict) and 'universe' in data[0]:
-                for i, asset_meta in enumerate(data[0]['universe']):
-                    if isinstance(asset_meta, dict):
-                        asset_name = asset_meta.get('name', '').upper()
-                        if asset_name == symbol_upper or asset_name == symbol_upper.replace('/', ''):
-                            symbol_index = i
-                            break
-
-            if symbol_index is None or symbol_index >= len(data[1]):
-                # Fallback to CCXT for unsupported symbols
+            result = self._find_ticker_row(self.get_all_ticker_data(), symbol)
+            if result is None:
                 return self._get_ccxt_ticker_fallback(symbol)
-
-            # Get asset data by index
-            asset_data = data[1][symbol_index]
-            if not isinstance(asset_data, dict):
-                return self._get_ccxt_ticker_fallback(symbol)
-
-            # Extract data from Hyperliquid API
-            mark_px = float(asset_data.get('markPx', 0))
-            oracle_px = float(asset_data.get('oraclePx', 0))
-            prev_day_px = float(asset_data.get('prevDayPx', 0))
-            day_ntl_vlm = float(asset_data.get('dayNtlVlm', 0))
-            open_interest = float(asset_data.get('openInterest', 0))
-            funding_rate = float(asset_data.get('funding', 0))
-
-            # Calculate 24h change
-            change_24h = mark_px - prev_day_px if prev_day_px else 0
-            percentage_24h = (change_24h / prev_day_px * 100) if prev_day_px else 0
-
-            # Convert open interest to USD value (OI * price)
-            open_interest_usd = open_interest * mark_px
-
-            result = {
-                'symbol': symbol,
-                'price': mark_px,
-                'oracle_price': oracle_px,
-                'change24h': change_24h,
-                'volume24h': day_ntl_vlm,
-                'percentage24h': percentage_24h,
-                'open_interest': open_interest_usd,
-                'funding_rate': funding_rate,
-            }
 
             logger.info(f"Got Hyperliquid ticker for {symbol}: price={result['price']}, change24h={result['change24h']:.2f}")
             return result
@@ -177,6 +113,87 @@ class HyperliquidClient:
             logger.error(f"Error fetching Hyperliquid ticker for {symbol}: {e}")
             # Fallback to CCXT
             return self._get_ccxt_ticker_fallback(symbol)
+
+    def get_all_ticker_data(self) -> List[Dict[str, Any]]:
+        """Get complete ticker data for all Hyperliquid assets using one native API call."""
+        try:
+            universe, asset_contexts = self._get_meta_and_asset_contexts()
+            rows: List[Dict[str, Any]] = []
+
+            for asset_meta, asset_data in zip(universe, asset_contexts):
+                if not isinstance(asset_meta, dict) or not isinstance(asset_data, dict):
+                    continue
+
+                symbol = str(asset_meta.get('name', '')).strip().upper()
+                if not symbol:
+                    continue
+
+                rows.append(self._build_ticker_result(symbol, asset_data))
+
+            logger.info(f"Got Hyperliquid ticker rows for {len(rows)} symbols")
+            return rows
+        except Exception as e:
+            logger.error(f"Error fetching Hyperliquid ticker rows: {e}")
+            return []
+
+    def _get_info_api_url(self) -> str:
+        if self.environment == "testnet":
+            return "https://api.hyperliquid-testnet.xyz/info"
+        return "https://api.hyperliquid.xyz/info"
+
+    def _get_meta_and_asset_contexts(self) -> tuple[list, list]:
+        import requests
+
+        response = requests.post(
+            self._get_info_api_url(),
+            json={"type": "metaAndAssetCtxs"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        if not isinstance(data, list) or len(data) < 2:
+            raise Exception("Invalid API response structure")
+
+        meta = data[0] if isinstance(data[0], dict) else {}
+        universe = meta.get('universe', [])
+        asset_contexts = data[1] if isinstance(data[1], list) else []
+
+        if not isinstance(universe, list):
+            raise Exception("Invalid universe payload")
+
+        return universe, asset_contexts
+
+    def _build_ticker_result(self, symbol: str, asset_data: Dict[str, Any]) -> Dict[str, Any]:
+        mark_px = float(asset_data.get('markPx', 0))
+        oracle_px = float(asset_data.get('oraclePx', 0))
+        prev_day_px = float(asset_data.get('prevDayPx', 0))
+        day_ntl_vlm = float(asset_data.get('dayNtlVlm', 0))
+        open_interest = float(asset_data.get('openInterest', 0))
+        funding_rate = float(asset_data.get('funding', 0))
+
+        change_24h = mark_px - prev_day_px if prev_day_px else 0
+        percentage_24h = (change_24h / prev_day_px * 100) if prev_day_px else 0
+        open_interest_usd = open_interest * mark_px
+
+        return {
+            'symbol': symbol,
+            'price': mark_px,
+            'oracle_price': oracle_px,
+            'change24h': change_24h,
+            'volume24h': day_ntl_vlm,
+            'percentage24h': percentage_24h,
+            'open_interest': open_interest_usd,
+            'funding_rate': funding_rate,
+        }
+
+    def _find_ticker_row(self, rows: List[Dict[str, Any]], symbol: str) -> Optional[Dict[str, Any]]:
+        symbol_upper = symbol.upper().replace('/', '')
+        for row in rows:
+            row_symbol = str(row.get('symbol', '')).upper().replace('/', '')
+            if row_symbol == symbol_upper:
+                return {**row, 'symbol': symbol}
+        return None
 
     def _get_ccxt_ticker_fallback(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Fallback to CCXT ticker for unsupported symbols"""
@@ -606,3 +623,9 @@ def get_ticker_data_from_hyperliquid(symbol: str, environment: str = "mainnet") 
     """Get complete ticker data from Hyperliquid"""
     client = get_hyperliquid_client_for_environment(environment)
     return client.get_ticker_data(symbol)
+
+
+def get_all_ticker_data_from_hyperliquid(environment: str = "mainnet") -> List[Dict[str, Any]]:
+    """Get complete ticker data for all Hyperliquid assets."""
+    client = get_hyperliquid_client_for_environment(environment)
+    return client.get_all_ticker_data()

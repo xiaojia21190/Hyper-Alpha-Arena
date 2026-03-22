@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from database.connection import SessionLocal
-from database.models import FactorValue
 from services.factor_registry import FACTOR_REGISTRY
 from services.factor_data_provider import ensure_kline_coverage
 from services.technical_indicators import calculate_indicators
@@ -196,15 +195,15 @@ class FactorComputationService:
 
         if isinstance(raw, dict):
             if extract_key == "width" and "upper" in raw and "middle" in raw and "lower" in raw:
-                u, m, l = raw["upper"], raw["middle"], raw["lower"]
-                if u and m and l and m[-1] != 0:
-                    return (u[-1] - l[-1]) / m[-1]
+                upper, middle, lower = raw["upper"], raw["middle"], raw["lower"]
+                if upper and middle and lower and middle[-1] != 0:
+                    return (upper[-1] - lower[-1]) / middle[-1]
                 return None
             if extract_key == "percent_b" and "upper" in raw and "lower" in raw:
-                u, l = raw["upper"], raw["lower"]
+                upper, lower = raw["upper"], raw["lower"]
                 close = float(klines[-1]["close"]) if klines else None
-                if u and l and close and (u[-1] - l[-1]) != 0:
-                    return (close - l[-1]) / (u[-1] - l[-1])
+                if upper and lower and close and (upper[-1] - lower[-1]) != 0:
+                    return (close - lower[-1]) / (upper[-1] - lower[-1])
                 return None
             if extract_key and extract_key in raw:
                 series = raw[extract_key]
@@ -262,7 +261,7 @@ class FactorComputationService:
 
         rows = []
         try:
-            custom_factors = db.query(CustomFactor).filter(CustomFactor.is_active == True).all()
+            custom_factors = db.query(CustomFactor).filter(CustomFactor.is_active).all()
         except Exception:
             return rows
 

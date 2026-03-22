@@ -12,7 +12,7 @@ import logging
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 
-from .virtual_account import VirtualAccount, VirtualPosition
+from .virtual_account import VirtualAccount
 from .models import BacktestTradeRecord
 
 logger = logging.getLogger(__name__)
@@ -458,11 +458,6 @@ class ExecutionSimulator:
                     f"Please fix your strategy code."
                 )
 
-        # Get position info before adding
-        pos = account.get_position(symbol)
-        old_size = pos.size
-        old_entry = pos.entry_price
-
         # Add to position (no longer pass TP/SL to position itself)
         account.add_to_position(
             symbol=symbol,
@@ -693,4 +688,3 @@ class ExecutionSimulator:
             pool_name=pool_name,
             triggered_signals=triggered_signals or [],
         )
-

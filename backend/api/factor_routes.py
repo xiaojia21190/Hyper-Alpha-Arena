@@ -50,7 +50,7 @@ async def get_factor_library(db: Session = Depends(get_db)):
     builtin = [{**f, "source": "builtin"} for f in FACTOR_REGISTRY]
 
     # Custom factors from DB (includes builtin_expression and user-created)
-    custom_rows = db.query(CustomFactor).filter(CustomFactor.is_active == True).all()
+    custom_rows = db.query(CustomFactor).filter(CustomFactor.is_active).all()
     custom = [
         {
             "name": cf.name,
@@ -122,7 +122,7 @@ async def get_factor_effectiveness(
     valid_sorts = {"icir", "ic_mean", "win_rate", "sample_count"}
     col = sort_by if sort_by in valid_sorts else "icir"
 
-    rows = db.execute(text(f"""
+    rows = db.execute(text("""
         SELECT DISTINCT ON (factor_name)
             factor_name, factor_category, ic_mean, ic_std, icir,
             win_rate, decay_half_life, sample_count, calc_date
@@ -306,7 +306,7 @@ async def compute_estimate(exchange: str = Query("hyperliquid"), db: Session = D
 
     symbols = factor_computation_service.get_symbols(exchange)
     # Count both builtin registry + active custom/builtin_expression factors
-    custom_count = db.query(CustomFactor).filter(CustomFactor.is_active == True).count()
+    custom_count = db.query(CustomFactor).filter(CustomFactor.is_active).count()
     factor_count = len(FACTOR_REGISTRY) + custom_count
 
     # Query actual data coverage per symbol

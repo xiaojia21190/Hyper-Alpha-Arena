@@ -31,6 +31,8 @@ class BacktestConfig:
 
     # Exchange for data source
     exchange: str = "hyperliquid"          # "hyperliquid" or "binance"
+    preload_periods: Optional[List[str]] = None
+    intrabar_tp_sl_period: Optional[str] = "1m"
 
     @property
     def start_time(self) -> datetime:

@@ -43,8 +43,12 @@ def get_klines_from_db(
 
     return [
         {
-            "timestamp": r[0], "open": float(r[1]), "high": float(r[2]),
-            "low": float(r[3]), "close": float(r[4]), "volume": float(r[5]),
+            "timestamp": r[0],
+            "open": float(r[1] or 0),
+            "high": float(r[2] or 0),
+            "low": float(r[3] or 0),
+            "close": float(r[4] or 0),
+            "volume": float(r[5] or 0),
         }
         for r in rows
     ]
@@ -74,7 +78,7 @@ def ensure_kline_coverage(
         if exchange == "binance":
             _backfill_binance(db, symbol, period, min_bars)
         else:
-            _backfill_hyperliquid(symbol, period, min_bars)
+            _backfill_hyperliquid(db, symbol, period, min_bars)
     except Exception as e:
         logger.warning(f"[FactorDataProvider] backfill {exchange}/{symbol}: {e}")
 
@@ -82,15 +86,25 @@ def ensure_kline_coverage(
     return get_klines_from_db(db, exchange, symbol, period)
 
 
-def _backfill_hyperliquid(symbol: str, period: str, target_bars: int):
-    """Backfill Hyperliquid klines via API. persist=True auto-saves to DB."""
+def _backfill_hyperliquid(db: Session, symbol: str, period: str, target_bars: int):
+    """Backfill Hyperliquid klines via API and persist with the current DB session."""
     from services.hyperliquid_market_data import get_kline_data_from_hyperliquid
+    from repositories.kline_repo import KlineRepository
 
     # Hyperliquid max ~5000 per request
     count = min(target_bars, 5000)
     klines = get_kline_data_from_hyperliquid(
-        symbol, period, count=count, persist=True
+        symbol, period, count=count, persist=False
     )
+    if klines:
+        KlineRepository(db).save_kline_data(
+            symbol=symbol,
+            market="CRYPTO",
+            period=period,
+            kline_data=klines,
+            exchange="hyperliquid",
+            environment="mainnet",
+        )
     print(f"[FactorDataProvider] Hyperliquid backfill {symbol}/{period}: "
           f"got {len(klines) if klines else 0} bars", flush=True)
 
@@ -121,7 +135,7 @@ def _backfill_binance(db: Session, symbol: str, period: str, target_bars: int):
             if not klines:
                 break
 
-            result = persistence.save_klines(klines)
+            persistence.save_klines(klines)
             total_fetched += len(klines)
 
             # Move end_time back for next batch

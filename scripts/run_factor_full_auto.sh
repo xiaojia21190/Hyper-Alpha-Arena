@@ -73,6 +73,44 @@ build_arg() {
   fi
 }
 
+wait_for_api_ready() {
+  local timeout_seconds="${1:-${READY_TIMEOUT_SECONDS}}"
+  local context="${2:-startup}"
+  local deadline=$(( $(date +%s) + timeout_seconds ))
+  while true; do
+    if curl -fsS "${BASE_URL}/api/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    if [[ "$(date +%s)" -ge "${deadline}" ]]; then
+      echo "[error] API not ready within ${timeout_seconds}s at ${BASE_URL} (${context})" >&2
+      echo "[hint] recent app logs:" >&2
+      docker compose logs --tail=120 app >&2 || true
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+trigger_research_run() {
+  local payload="$1"
+  local max_attempts="${TRIGGER_RETRY_ATTEMPTS:-10}"
+  local retry_sleep_seconds="${TRIGGER_RETRY_SLEEP_SECONDS:-3}"
+  local attempt
+  for (( attempt=1; attempt<=max_attempts; attempt++ )); do
+    if curl -fsS -X POST "${BASE_URL}/api/factor-research/run" \
+      -H "Content-Type: application/json" \
+      -d "${payload}" >/dev/null; then
+      return 0
+    fi
+    echo "[warn] trigger run request failed (attempt ${attempt}/${max_attempts}), retrying in ${retry_sleep_seconds}s"
+    sleep "${retry_sleep_seconds}"
+  done
+  echo "[error] failed to trigger research run after ${max_attempts} attempts" >&2
+  echo "[hint] recent app logs:" >&2
+  docker compose logs --tail=120 app >&2 || true
+  return 1
+}
+
 validate_external_pg_config() {
   if [[ "${USE_EXISTING_POSTGRES}" != "true" ]]; then
     return 0
@@ -132,19 +170,7 @@ else
 fi
 
 echo "[step] waiting for API readiness"
-READY_DEADLINE=$(( $(date +%s) + READY_TIMEOUT_SECONDS ))
-while true; do
-  if curl -fsS "${BASE_URL}/api/health" >/dev/null 2>&1; then
-    break
-  fi
-  if [[ "$(date +%s)" -ge "${READY_DEADLINE}" ]]; then
-    echo "[error] API not ready within ${READY_TIMEOUT_SECONDS}s at ${BASE_URL}" >&2
-    echo "[hint] recent app logs:" >&2
-    docker compose logs --tail=120 app >&2 || true
-    exit 3
-  fi
-  sleep 2
-done
+wait_for_api_ready "${READY_TIMEOUT_SECONDS}" "initial startup"
 
 echo "[step] creating accounts"
 PAPER_ACCOUNT_ID="$(create_account "paper-auto-${TIMESTAMP}")"
@@ -195,6 +221,9 @@ else
   docker compose -f docker-compose.yml -f "${OVERRIDE_FILE}" up -d "${UP_ARG}"
 fi
 
+echo "[step] waiting for API readiness after override restart"
+wait_for_api_ready "${READY_TIMEOUT_SECONDS}" "after override restart"
+
 echo "[step] triggering one research run"
 TRIGGER_PAYLOAD="$(
 python - <<PY
@@ -220,9 +249,7 @@ print(json.dumps({
 PY
 )"
 
-curl -sS -X POST "${BASE_URL}/api/factor-research/run" \
-  -H "Content-Type: application/json" \
-  -d "${TRIGGER_PAYLOAD}" >/dev/null
+trigger_research_run "${TRIGGER_PAYLOAD}"
 
 echo "[step] polling run status"
 DEADLINE=$(( $(date +%s) + WAIT_TIMEOUT_SECONDS ))

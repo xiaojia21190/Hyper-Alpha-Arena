@@ -7,7 +7,7 @@ Orchestrates trigger generation, strategy execution, and result calculation.
 
 import logging
 import time
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
@@ -85,6 +85,7 @@ class ProgramBacktestEngine:
                 start_time_ms=config.start_time_ms,
                 end_time_ms=config.end_time_ms,
                 exchange=config.exchange,
+                preload_periods=config.preload_periods,
             )
 
             # 3. Run event loop (returns all triggers including dynamic scheduled ones)
@@ -397,6 +398,9 @@ class ProgramBacktestEngine:
             current_time_ms: int,
         ) -> List[BacktestTradeRecord]:
             """Check TP/SL using 1m kline high/low for maximum accuracy."""
+            if not config.intrabar_tp_sl_period:
+                return []
+
             all_tp_sl_trades = []
 
             # Get 1m klines between triggers for each symbol with positions
@@ -407,7 +411,10 @@ class ProgramBacktestEngine:
 
                 # Use 1m klines for precise TP/SL detection
                 klines = data_provider.get_klines_between(
-                    symbol, last_time_ms, current_time_ms, "1m"
+                    symbol,
+                    last_time_ms,
+                    current_time_ms,
+                    config.intrabar_tp_sl_period,
                 )
 
                 if klines:
@@ -572,7 +579,6 @@ class ProgramBacktestEngine:
     ) -> Any:
         """Build MarketData object for strategy execution."""
         from program_trader.models import MarketData, Position, Trade
-        from datetime import datetime, timezone
 
         # Convert virtual positions to Position objects
         positions = {}
@@ -754,4 +760,3 @@ class ProgramBacktestEngine:
             start_time=config.start_time,
             end_time=config.end_time,
         )
-

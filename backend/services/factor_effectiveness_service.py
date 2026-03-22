@@ -28,9 +28,8 @@ Runs daily via CronTrigger at UTC 01:00, also callable on-demand.
 """
 
 import logging
-import time
-from datetime import date, datetime, timezone, timedelta
-from typing import List, Dict, Optional, Tuple
+from datetime import date, datetime, timezone
+from typing import List, Dict, Optional, Callable
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -48,6 +47,13 @@ class FactorEffectivenessService:
     def __init__(self):
         self._running = False
         self._progress: Dict = {"status": "idle"}
+        self._progress_callback: Optional[Callable[[Dict], None]] = None
+
+    def set_progress_callback(
+        self,
+        callback: Optional[Callable[[Dict], None]],
+    ) -> None:
+        self._progress_callback = callback
 
     def start(self):
         if self._running:
@@ -80,7 +86,8 @@ class FactorEffectivenessService:
         return dict(self._progress)
 
     def compute_for_exchange(self, db: Session, exchange: str, period: str = "1h",
-                             force: bool = False):
+                             force: bool = False,
+                             symbols_override: Optional[List[str]] = None):
         """Compute effectiveness for all factors on one exchange.
 
         Args:
@@ -88,7 +95,7 @@ class FactorEffectivenessService:
                    ON CONFLICT DO UPDATE). Used by manual compute button.
                    If False, skip existing calc_dates (daily cron incremental mode).
         """
-        symbols = self._get_symbols(db, exchange)
+        symbols = self._normalize_symbols_override(symbols_override) or self._get_symbols(db, exchange)
         if not symbols:
             self._progress = {"status": "idle"}
             return {"computed": 0, "exchange": exchange}
@@ -99,10 +106,12 @@ class FactorEffectivenessService:
             "current_symbol": "", "current_factor": "",
             "factor_completed": 0, "factor_total": 0,
         }
+        self._emit_progress()
         count = 0
-        for i, symbol in enumerate(symbols):
+        for i, symbol in enumerate(symbols, start=1):
             self._progress["current_symbol"] = symbol
             self._progress["symbol_completed"] = i
+            self._emit_progress()
             try:
                 n = self._compute_symbol(db, exchange, symbol, period, force)
                 count += n
@@ -110,6 +119,7 @@ class FactorEffectivenessService:
                 logger.warning(f"[FactorEffectiveness] {exchange}/{symbol}: {e}")
         db.commit()
         self._progress = {"status": "idle"}
+        self._emit_progress()
         print(f"[FactorEffectiveness] {exchange}: {count} records", flush=True)
         return {"computed": count, "exchange": exchange}
 
@@ -127,7 +137,7 @@ class FactorEffectivenessService:
         custom_factor = None
         if not builtin_def:
             custom_factor = db.query(CustomFactor).filter(
-                CustomFactor.name == factor_name, CustomFactor.is_active == True
+                CustomFactor.name == factor_name, CustomFactor.is_active
             ).first()
             if not custom_factor:
                 return {"error": f"Factor '{factor_name}' not found"}
@@ -193,6 +203,39 @@ class FactorEffectivenessService:
 
     # ── internal ──
 
+    def _normalize_symbols_override(self, symbols: Optional[List[str]]) -> List[str]:
+        normalized: List[str] = []
+        seen: set[str] = set()
+
+        for symbol in symbols or []:
+            normalized_symbol = str(symbol or "").strip().upper()
+            if not normalized_symbol or normalized_symbol in seen:
+                continue
+            seen.add(normalized_symbol)
+            normalized.append(normalized_symbol)
+
+        return normalized
+
+    def _normalize_calc_date(self, value) -> Optional[date]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return None
+            try:
+                return date.fromisoformat(raw[:10])
+            except ValueError:
+                try:
+                    return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+                except ValueError:
+                    return None
+        return None
+
     def _get_symbols(self, db, exchange):
         try:
             if exchange == "binance":
@@ -217,6 +260,23 @@ class FactorEffectivenessService:
 
         n_bars = len(klines)
         closes = [float(k["close"]) for k in klines]
+        latest_calc_date = datetime.fromtimestamp(
+            klines[-1]["timestamp"], tz=timezone.utc
+        ).date()
+        expected_factor_count = self._get_expected_factor_count(db)
+        if not force and self._is_symbol_effectiveness_fresh(
+            db=db,
+            exchange=exchange,
+            symbol=symbol,
+            period=period,
+            latest_calc_date=latest_calc_date,
+            expected_factor_count=expected_factor_count,
+        ):
+            self._progress["current_factor"] = "cached"
+            self._progress["factor_completed"] = expected_factor_count
+            self._progress["factor_total"] = expected_factor_count
+            self._emit_progress()
+            return 0
 
         tech_keys = list({f["indicator_key"] for f in FACTOR_REGISTRY
                           if f["compute_type"] == "technical"})
@@ -233,7 +293,7 @@ class FactorEffectivenessService:
         from database.models import CustomFactor
         try:
             custom_count = db.query(CustomFactor).filter(
-                CustomFactor.is_active == True).count()
+                CustomFactor.is_active).count()
         except Exception:
             custom_count = 0
 
@@ -244,6 +304,7 @@ class FactorEffectivenessService:
             self._progress["current_factor"] = fname
             self._progress["factor_completed"] = fi
             self._progress["factor_total"] = factor_total
+            self._emit_progress()
             count += self._compute_factor_windowed(
                 db, exchange, fname, fcat, symbol, period,
                 fvals, closes, klines, n_bars, force=force,
@@ -568,8 +629,11 @@ class FactorEffectivenessService:
                 ORDER BY calc_date
             """), {"ex": exchange, "fn": fname, "sym": symbol, "p": period}).fetchall()
             for r in rows:
-                existing_by_fp.setdefault(r[0], []).append((r[1], float(r[2])))
-                existing_dates.add(r[1])
+                normalized_calc_date = self._normalize_calc_date(r[1])
+                if normalized_calc_date is None:
+                    continue
+                existing_by_fp.setdefault(r[0], []).append((normalized_calc_date, float(r[2])))
+                existing_dates.add(normalized_calc_date)
 
         # Phase 1: Compute per-window IC for each forward_period
         # window_data[calc_date][fp_label] = {ic, win_rate, sample_count}
@@ -657,7 +721,7 @@ class FactorEffectivenessService:
 
         try:
             custom_factors = db.query(CustomFactor).filter(
-                CustomFactor.is_active == True).all()
+                CustomFactor.is_active).all()
         except Exception:
             return 0
 
@@ -666,6 +730,7 @@ class FactorEffectivenessService:
             self._progress["current_factor"] = cf.name
             self._progress["factor_completed"] = factor_offset + ci
             self._progress["factor_total"] = factor_total
+            self._emit_progress()
             try:
                 series, err = factor_expression_engine.execute(cf.expression, klines)
                 if series is None or len(series) != n_bars:
@@ -678,6 +743,75 @@ class FactorEffectivenessService:
             except Exception as e:
                 logger.warning(f"[FactorEffectiveness] custom '{cf.name}' err: {e}")
         return count
+
+    def _get_expected_factor_count(self, db) -> int:
+        from database.models import CustomFactor
+
+        try:
+            custom_count = db.query(CustomFactor).filter(
+                CustomFactor.is_active
+            ).count()
+        except Exception:
+            custom_count = 0
+        return len(FACTOR_REGISTRY) + int(custom_count or 0)
+
+    def _is_symbol_effectiveness_fresh(
+        self,
+        db,
+        exchange: str,
+        symbol: str,
+        period: str,
+        latest_calc_date: date,
+        expected_factor_count: int,
+    ) -> bool:
+        if expected_factor_count <= 0:
+            return False
+
+        row = db.execute(
+            text("""
+                SELECT calc_date, COUNT(DISTINCT factor_name) AS factor_count
+                FROM factor_effectiveness
+                WHERE exchange = :ex AND symbol = :sym AND period = :p
+                GROUP BY calc_date
+                ORDER BY calc_date DESC
+                LIMIT 1
+            """),
+            {"ex": exchange, "sym": symbol, "p": period},
+        ).fetchone()
+        if not row:
+            return False
+
+        effective_calc_date = self._normalize_calc_date(row[0])
+        if effective_calc_date != latest_calc_date:
+            return False
+
+        try:
+            latest_factor_count = int(row[1] or 0)
+        except (TypeError, ValueError):
+            return False
+        historical_row = db.execute(
+            text("""
+                SELECT COUNT(DISTINCT factor_name)
+                FROM factor_effectiveness
+                WHERE exchange = :ex AND symbol = :sym AND period = :p
+            """),
+            {"ex": exchange, "sym": symbol, "p": period},
+        ).fetchone()
+        try:
+            historical_factor_count = int((historical_row or (0,))[0] or 0)
+        except (TypeError, ValueError):
+            historical_factor_count = 0
+
+        required_factor_count = min(
+            expected_factor_count,
+            historical_factor_count or expected_factor_count,
+        )
+        return latest_factor_count >= required_factor_count
+
+    def _emit_progress(self) -> None:
+        if self._progress_callback is None:
+            return
+        self._progress_callback(dict(self._progress))
 
     def _align_series(self, fvals, closes, offset, n_bars):
         """Align factor values with forward returns, filtering None."""

@@ -5,11 +5,23 @@
 """
 
 import pandas as pd
-import pandas_ta as ta
 from typing import List, Dict, Any, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+try:
+    import pandas_ta as ta  # type: ignore
+    PANDAS_TA_AVAILABLE = True
+    PANDAS_TA_IMPORT_ERROR: Optional[Exception] = None
+except Exception as exc:  # pragma: no cover - env-specific compatibility guard
+    ta = None  # type: ignore
+    PANDAS_TA_AVAILABLE = False
+    PANDAS_TA_IMPORT_ERROR = exc
+    logger.warning(
+        "pandas_ta import failed; technical indicator calculations are disabled in this environment: %s",
+        exc,
+    )
 
 
 def calculate_indicators(kline_data: List[Dict[str, Any]], indicators: List[str]) -> Dict[str, Any]:
@@ -24,6 +36,12 @@ def calculate_indicators(kline_data: List[Dict[str, Any]], indicators: List[str]
         Dict: 计算结果，格式为 {'EMA20': [...], 'MACD': {...}, ...}
     """
     if not kline_data:
+        return {}
+    if not PANDAS_TA_AVAILABLE:
+        logger.error(
+            "calculate_indicators skipped because pandas_ta is unavailable: %s",
+            PANDAS_TA_IMPORT_ERROR,
+        )
         return {}
 
     try:

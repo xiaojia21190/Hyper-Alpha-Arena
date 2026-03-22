@@ -14,10 +14,8 @@ must be added to backend/backtest/* instead of this file.
 
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
-from datetime import datetime
-import time
 
-from .models import MarketData, Decision, ActionType, Kline, Position, RegimeInfo
+from .models import MarketData, ActionType, Kline, Position, RegimeInfo
 
 
 @dataclass
@@ -108,7 +106,7 @@ class BacktestDataProvider:
             try:
                 factor = db.query(CustomFactor).filter(
                     CustomFactor.name == factor_name,
-                    CustomFactor.is_active == True
+                    CustomFactor.is_active
                 ).first()
                 if not factor:
                     result["error"] = f"Factor '{factor_name}' not found"

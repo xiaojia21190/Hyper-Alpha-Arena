@@ -307,6 +307,12 @@ backend/data.db
 us_crypto_news.json
 data.db
 backend/tests/
+!backend/tests/
+!backend/tests/**
+backend/tests/**/__pycache__/
+backend/tests/**/*.pyc
+backend/tests/**/*.pyo
+backend/tests/**/*.pyd
 .vscode/
 backend/.DS_Store
 
@@ -334,3 +340,5 @@ prompts/
 # Internal docs (not for public repo)
 docs/*.md
 backend/scripts/
+.ace-tool/
+.omx/
