@@ -271,6 +271,52 @@ Then restart:
 docker compose up -d --build
 ```
 
+### Headless background loop (no UI, low-memory profile)
+
+For servers with tight memory (for example 2GB), use a lightweight loop profile and run fully in background:
+
+```bash
+# 0) fill your real account IDs
+export PAPER_ACCOUNT_ID=1
+export LIVE_ACCOUNT_ID=2
+
+# 1) create a compose override for factor loop params
+cat > docker-compose.factor-loop.yml <<EOF
+services:
+  app:
+    environment:
+      FACTOR_RESEARCH_ENABLED: "true"
+      FACTOR_RESEARCH_RUN_ON_STARTUP: "true"
+      FACTOR_RESEARCH_INTERVAL_SECONDS: "21600"
+      FACTOR_RESEARCH_EXCHANGE: "hyperliquid"
+      FACTOR_RESEARCH_TOP_N_SYMBOLS: "5"
+      FACTOR_RESEARCH_LOOKBACK_DAYS: "14"
+      FACTOR_RESEARCH_PRESCREEN_LIMIT: "3"
+      FACTOR_RESEARCH_AUTO_PROMOTE_PAPER: "true"
+      FACTOR_RESEARCH_PAPER_ACCOUNT_ID: "${PAPER_ACCOUNT_ID}"
+      FACTOR_RESEARCH_AUTO_PROMOTE_LIVE: "true"
+      FACTOR_RESEARCH_LIVE_ACCOUNT_ID: "${LIVE_ACCOUNT_ID}"
+      FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS: "24"
+      FACTOR_RESEARCH_LIVE_MIN_TRADES: "10"
+      FACTOR_RESEARCH_LIVE_MIN_NET_PNL: "0"
+      FACTOR_RESEARCH_LIVE_MIN_WIN_RATE: "50"
+      FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT: "20"
+      FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM: "true"
+EOF
+
+# 2) start in background (no web UI needed)
+docker compose -f docker-compose.yml -f docker-compose.factor-loop.yml up -d --build
+
+# 3) optional: trigger one run immediately
+curl -sS -X POST "http://127.0.0.1:8802/api/factor-research/run" \
+  -H "Content-Type: application/json" \
+  -d "{\"exchange\":\"hyperliquid\",\"top_n_symbols\":5,\"lookback_days\":14,\"objective\":\"return_over_drawdown\",\"factor_scope\":\"builtin_only\",\"period\":\"1h\",\"prescreen_limit\":3,\"auto_promote_paper\":true,\"paper_account_id\":${PAPER_ACCOUNT_ID},\"auto_promote_live\":true,\"live_account_id\":${LIVE_ACCOUNT_ID},\"live_min_observation_hours\":24,\"live_min_trades\":10,\"live_min_net_pnl\":0,\"live_min_win_rate\":50,\"live_max_drawdown_percent\":20}"
+
+# 4) monitor only via API + logs
+curl -sS "http://127.0.0.1:8802/api/factor-research/status"
+docker compose logs -f app
+```
+
 ### Observe paper performance (step 6)
 
 ```bash
@@ -301,6 +347,20 @@ The scheduler can auto-decide whether to promote to live based on paper metrics:
 - `observation_hours >= FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS`
 
 If all checks pass, the best portfolio is auto-deployed to `FACTOR_RESEARCH_LIVE_ACCOUNT_ID`.
+
+### What smaller parameters change
+
+Using smaller params (like `top_n_symbols=5`, `lookback_days=14`, `prescreen_limit=3`) reduces memory/CPU and makes runs faster, but changes strategy quality trade-offs:
+
+- Smaller `top_n_symbols`: faster and lighter, but universe coverage drops and diversification weakens.
+- Smaller `lookback_days`: more responsive to recent regime, but noisier and easier to overfit short-term behavior.
+- Smaller `prescreen_limit`: much less compute, but may skip strong candidates before full ranking.
+- Longer `FACTOR_RESEARCH_INTERVAL_SECONDS`: lower resource usage, but slower adaptation to new market conditions.
+
+Practical advice:
+
+- 2GB server: start with `5 / 14 / 3`, stabilize first.
+- After stable runtime, step up gradually to `10 / 30 / 5`, then observe memory and gate stability.
 
 ### One-shot API command (paper + auto-live decision)
 
