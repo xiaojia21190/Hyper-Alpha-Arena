@@ -317,6 +317,53 @@ curl -sS "http://127.0.0.1:8802/api/factor-research/status"
 docker compose logs -f app
 ```
 
+### Headless background loop (no UI, full profile)
+
+If you want everything enabled (`top_n_symbols=20`, `lookback_days=180`, `prescreen_limit=10`), use this profile:
+
+```bash
+# 0) fill your real account IDs
+export PAPER_ACCOUNT_ID=1
+export LIVE_ACCOUNT_ID=2
+
+# 1) create full-profile override
+cat > docker-compose.factor-full.yml <<EOF
+services:
+  app:
+    environment:
+      FACTOR_ENGINE_ENABLED: "true"
+      FACTOR_RESEARCH_ENABLED: "true"
+      FACTOR_RESEARCH_RUN_ON_STARTUP: "true"
+      FACTOR_RESEARCH_INTERVAL_SECONDS: "21600"
+      FACTOR_RESEARCH_EXCHANGE: "hyperliquid"
+      FACTOR_RESEARCH_TOP_N_SYMBOLS: "20"
+      FACTOR_RESEARCH_LOOKBACK_DAYS: "180"
+      FACTOR_RESEARCH_PRESCREEN_LIMIT: "10"
+      FACTOR_RESEARCH_AUTO_PROMOTE_PAPER: "true"
+      FACTOR_RESEARCH_PAPER_ACCOUNT_ID: "${PAPER_ACCOUNT_ID}"
+      FACTOR_RESEARCH_AUTO_PROMOTE_LIVE: "true"
+      FACTOR_RESEARCH_LIVE_ACCOUNT_ID: "${LIVE_ACCOUNT_ID}"
+      FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS: "24"
+      FACTOR_RESEARCH_LIVE_MIN_TRADES: "10"
+      FACTOR_RESEARCH_LIVE_MIN_NET_PNL: "0"
+      FACTOR_RESEARCH_LIVE_MIN_WIN_RATE: "50"
+      FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT: "20"
+      FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM: "true"
+EOF
+
+# 2) start in background (no web UI required)
+docker compose -f docker-compose.yml -f docker-compose.factor-full.yml up -d --build
+
+# 3) optional: trigger one run immediately
+curl -sS -X POST "http://127.0.0.1:8802/api/factor-research/run" \
+  -H "Content-Type: application/json" \
+  -d "{\"exchange\":\"hyperliquid\",\"top_n_symbols\":20,\"lookback_days\":180,\"objective\":\"return_over_drawdown\",\"factor_scope\":\"builtin_only\",\"period\":\"1h\",\"prescreen_limit\":10,\"auto_promote_paper\":true,\"paper_account_id\":${PAPER_ACCOUNT_ID},\"auto_promote_live\":true,\"live_account_id\":${LIVE_ACCOUNT_ID},\"live_min_observation_hours\":24,\"live_min_trades\":10,\"live_min_net_pnl\":0,\"live_min_win_rate\":50,\"live_max_drawdown_percent\":20}"
+
+# 4) monitor via API + logs
+curl -sS "http://127.0.0.1:8802/api/factor-research/status"
+docker compose logs -f app
+```
+
 ### Observe paper performance (step 6)
 
 ```bash
