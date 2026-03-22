@@ -15,6 +15,7 @@ LOOKBACK_DAYS="${LOOKBACK_DAYS:-180}"
 PRESCREEN_LIMIT="${PRESCREEN_LIMIT:-10}"
 WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-1800}"
 POLL_SECONDS="${POLL_SECONDS:-5}"
+READY_TIMEOUT_SECONDS="${READY_TIMEOUT_SECONDS:-600}"
 OVERRIDE_FILE="${OVERRIDE_FILE:-docker-compose.factor-full.yml}"
 BOOTSTRAP_OVERRIDE_FILE="${BOOTSTRAP_OVERRIDE_FILE:-docker-compose.factor-bootstrap.yml}"
 TIMESTAMP="$(date +%s)"
@@ -131,13 +132,15 @@ else
 fi
 
 echo "[step] waiting for API readiness"
-READY_DEADLINE=$(( $(date +%s) + 180 ))
+READY_DEADLINE=$(( $(date +%s) + READY_TIMEOUT_SECONDS ))
 while true; do
-  if curl -fsS "${BASE_URL}/api/factor-research/status" >/dev/null 2>&1; then
+  if curl -fsS "${BASE_URL}/api/health" >/dev/null 2>&1; then
     break
   fi
   if [[ "$(date +%s)" -ge "${READY_DEADLINE}" ]]; then
-    echo "[error] API not ready within 180s at ${BASE_URL}" >&2
+    echo "[error] API not ready within ${READY_TIMEOUT_SECONDS}s at ${BASE_URL}" >&2
+    echo "[hint] recent app logs:" >&2
+    docker compose logs --tail=120 app >&2 || true
     exit 3
   fi
   sleep 2
