@@ -9,8 +9,39 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { apiRequest, getHyperliquidWatchlist, getBinanceWatchlist } from '@/lib/api'
-import { RefreshCw, Info, CheckCircle2, ArrowUpDown, FlaskConical, Plus, Trash2, Pencil, BarChart3 } from 'lucide-react'
+import {
+  apiRequest,
+  deployFactorPortfolioLive,
+  deployFactorPortfolioPaper,
+  getHyperliquidWatchlist,
+  getBinanceWatchlist,
+  getFactorResearchStatus,
+  getLatestFactorPortfolioRun,
+  getAccounts,
+  triggerFactorResearchRun,
+  type FactorPortfolioCandidate,
+  type FactorPortfolioLatestResponse,
+  type FactorResearchProgress,
+  type FactorResearchRankedResult,
+  type FactorResearchRunConfig,
+  type FactorResearchStatus,
+} from '@/lib/api'
+import {
+  RefreshCw,
+  Info,
+  CheckCircle2,
+  ArrowUpDown,
+  FlaskConical,
+  Plus,
+  Trash2,
+  Pencil,
+  BarChart3,
+  Play,
+  Trophy,
+  ShieldAlert,
+  Clock3,
+  Rocket,
+} from 'lucide-react'
 import FactorAnalysisDialog from './FactorAnalysisDialog'
 import ExchangeIcon from '@/components/exchange/ExchangeIcon'
 import PacmanLoader from '@/components/ui/pacman-loader'
@@ -18,6 +49,70 @@ import type { ExchangeId } from '@/lib/types/exchange'
 
 const EXCHANGES: ExchangeId[] = ['hyperliquid', 'binance']
 const FORWARD_PERIODS = ['1h', '4h', '12h', '24h']
+const DEFAULT_RESEARCH_RUN_CONFIG: FactorResearchRunConfig = {
+  exchange: 'hyperliquid',
+  top_n_symbols: 20,
+  lookback_days: 180,
+  objective: 'return_over_drawdown',
+  factor_scope: 'builtin_only',
+  period: '1h',
+  prescreen_limit: 10,
+}
+const RESEARCH_POLL_INTERVAL_MS = 15000
+const RESEARCH_ACTIVE_POLL_INTERVAL_MS = 5000
+
+function formatResearchTimestamp(ts: number | null | undefined) {
+  if (!ts) return '--'
+  return new Date(ts * 1000).toLocaleString()
+}
+
+function getResearchStatusMeta(status: string | null | undefined, isZh: boolean) {
+  switch (status) {
+    case 'running':
+      return {
+        label: isZh ? '运行中' : 'Running',
+        className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600',
+      }
+    case 'success':
+      return {
+        label: isZh ? '已完成' : 'Completed',
+        className: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-600',
+      }
+    case 'error':
+      return {
+        label: isZh ? '出错' : 'Error',
+        className: 'border-red-500/30 bg-red-500/10 text-red-600',
+      }
+    default:
+      return {
+        label: isZh ? '空闲' : 'Idle',
+        className: 'border-muted bg-muted/40 text-muted-foreground',
+      }
+  }
+}
+
+function getResearchPhaseLabel(phase: string | null | undefined, isZh: boolean) {
+  switch (phase) {
+    case 'preparing':
+      return isZh ? '准备中' : 'Preparing'
+    case 'ensure_effectiveness':
+      return isZh ? '有效性计算' : 'Effectiveness'
+    case 'candidate_prescreen':
+      return isZh ? '候选预筛' : 'Prescreen'
+    case 'fast_backtest':
+      return isZh ? '快速回测' : 'Fast backtest'
+    case 'full_backtest':
+      return isZh ? '正式回测' : 'Full backtest'
+    case 'complete':
+      return isZh ? '已完成' : 'Complete'
+    case 'queued':
+      return isZh ? '排队中' : 'Queued'
+    case 'error':
+      return isZh ? '失败' : 'Error'
+    default:
+      return phase || '--'
+  }
+}
 
 // Function categories for the picker in Custom Factor dialog
 const FUNC_CATEGORIES: { key: string; en: string; zh: string; fns: string[] }[] = [
@@ -126,6 +221,17 @@ export default function FactorLibrary() {
   // Factor Analysis Dialog state
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [analysisFactor, setAnalysisFactor] = useState<{ name: string; displayName: string }>({ name: '', displayName: '' })
+  const [researchStatus, setResearchStatus] = useState<FactorResearchStatus | null>(null)
+  const [researchStatusLoading, setResearchStatusLoading] = useState(true)
+  const [researchStarting, setResearchStarting] = useState(false)
+  const [researchActionError, setResearchActionError] = useState('')
+  const [portfolioSnapshot, setPortfolioSnapshot] = useState<FactorPortfolioLatestResponse | null>(null)
+  const [portfolioLoading, setPortfolioLoading] = useState(false)
+  const [portfolioActionLoading, setPortfolioActionLoading] = useState<'paper' | 'live' | null>(null)
+  const [portfolioActionError, setPortfolioActionError] = useState('')
+  const [portfolioActionSuccess, setPortfolioActionSuccess] = useState('')
+  const [deployAccountId, setDeployAccountId] = useState<number>(1)
+  const [availableAccounts, setAvailableAccounts] = useState<Array<{ id: number; name: string }>>([])
 
   useEffect(() => {
     apiRequest('/factors/library').then(r => r.json()).then(setLibrary).catch(() => {})
@@ -172,6 +278,67 @@ export default function FactorLibrary() {
   }, [])
 
   useEffect(() => { loadCustomFactors() }, [loadCustomFactors])
+
+  const loadResearchStatus = useCallback(async (showLoader = false) => {
+    if (showLoader) setResearchStatusLoading(true)
+    try {
+      const status = await getFactorResearchStatus()
+      setResearchStatus(status)
+      setResearchActionError('')
+    } catch (e: any) {
+      setResearchActionError(e.message || (isZh ? '读取研究状态失败' : 'Failed to load research status'))
+    } finally {
+      if (showLoader) setResearchStatusLoading(false)
+    }
+  }, [isZh])
+
+  const loadPortfolioSnapshot = useCallback(async () => {
+    setPortfolioLoading(true)
+    try {
+      const payload = await getLatestFactorPortfolioRun()
+      setPortfolioSnapshot(payload)
+      setPortfolioActionError('')
+    } catch {
+      setPortfolioSnapshot(null)
+    } finally {
+      setPortfolioLoading(false)
+    }
+  }, [])
+
+  const loadDeployAccounts = useCallback(async () => {
+    try {
+      const accounts = await getAccounts({ include_hidden: true })
+      const rows = (accounts || []).filter((row) => row.is_active).map((row) => ({
+        id: row.id,
+        name: row.name || `Account ${row.id}`,
+      }))
+      setAvailableAccounts(rows)
+      if (rows.length > 0) {
+        setDeployAccountId((prev) => (prev > 0 ? prev : rows[0].id))
+      }
+    } catch {
+      setAvailableAccounts([])
+    }
+  }, [])
+
+  useEffect(() => {
+    loadResearchStatus(true)
+  }, [loadResearchStatus])
+
+  useEffect(() => {
+    loadPortfolioSnapshot()
+    loadDeployAccounts()
+  }, [loadPortfolioSnapshot, loadDeployAccounts])
+
+  useEffect(() => {
+    const intervalMs = researchStatus?.status === 'running'
+      ? RESEARCH_ACTIVE_POLL_INTERVAL_MS
+      : RESEARCH_POLL_INTERVAL_MS
+    const timer = setInterval(() => {
+      loadResearchStatus()
+    }, intervalMs)
+    return () => clearInterval(timer)
+  }, [loadResearchStatus, researchStatus?.status])
 
   // Custom Factor Lab handlers
   const openLabDialog = (factorId?: number) => {
@@ -313,6 +480,92 @@ export default function FactorLibrary() {
     }
   }
 
+  const handleResearchRun = async () => {
+    setResearchStarting(true)
+    setResearchActionError('')
+    try {
+      const config = {
+        ...DEFAULT_RESEARCH_RUN_CONFIG,
+        ...(researchStatus?.config || {}),
+      }
+      const response = await triggerFactorResearchRun(config)
+      if (response.status === 'already_running') {
+        setResearchActionError(isZh ? '因子研究已在后台运行中' : 'Factor research is already running in the background')
+      }
+      await loadResearchStatus(true)
+    } catch (e: any) {
+      setResearchActionError(e.message || (isZh ? '启动研究失败' : 'Failed to start research'))
+    } finally {
+      setResearchStarting(false)
+    }
+  }
+
+  const handleDeployPortfolioPaper = async (portfolioId: number) => {
+    if (!deployAccountId || deployAccountId <= 0) {
+      setPortfolioActionError(isZh ? '请先填写有效账户ID' : 'Please provide a valid account id')
+      return
+    }
+    setPortfolioActionLoading('paper')
+    setPortfolioActionError('')
+    setPortfolioActionSuccess('')
+    try {
+      const payload = await deployFactorPortfolioPaper(portfolioId, {
+        account_id: deployAccountId,
+        period: '1h',
+        trigger_interval: 3600,
+        signal_pool_ids: [],
+        exchange: 'hyperliquid',
+      })
+      setPortfolioActionSuccess(
+        isZh
+          ? `纸面部署成功，Program #${payload.program.id}，Binding #${payload.binding.id}`
+          : `Paper deployment succeeded. Program #${payload.program.id}, Binding #${payload.binding.id}`
+      )
+      await Promise.all([loadResearchStatus(), loadPortfolioSnapshot()])
+    } catch (e: any) {
+      setPortfolioActionError(e?.message || (isZh ? '纸面部署失败' : 'Paper deployment failed'))
+    } finally {
+      setPortfolioActionLoading(null)
+    }
+  }
+
+  const handleDeployPortfolioLive = async (portfolioId: number) => {
+    if (!deployAccountId || deployAccountId <= 0) {
+      setPortfolioActionError(isZh ? '请先填写有效账户ID' : 'Please provide a valid account id')
+      return
+    }
+    const confirmed = window.confirm(
+      isZh
+        ? '确认要执行实盘部署吗？这将创建可执行实盘绑定。'
+        : 'Confirm live deployment? This will create an executable live binding.'
+    )
+    if (!confirmed) return
+
+    setPortfolioActionLoading('live')
+    setPortfolioActionError('')
+    setPortfolioActionSuccess('')
+    try {
+      const payload = await deployFactorPortfolioLive(portfolioId, {
+        account_id: deployAccountId,
+        confirm_live: true,
+        period: '1h',
+        trigger_interval: 3600,
+        signal_pool_ids: [],
+        exchange: 'hyperliquid',
+      })
+      setPortfolioActionSuccess(
+        isZh
+          ? `实盘部署成功，Program #${payload.program.id}，Binding #${payload.binding.id}`
+          : `Live deployment succeeded. Program #${payload.program.id}, Binding #${payload.binding.id}`
+      )
+      await Promise.all([loadResearchStatus(), loadPortfolioSnapshot()])
+    } catch (e: any) {
+      setPortfolioActionError(e?.message || (isZh ? '实盘部署失败' : 'Live deployment failed'))
+    } finally {
+      setPortfolioActionLoading(null)
+    }
+  }
+
   const toggleSort = (col: string) => {
     if (sortCol === col) setSortDesc(!sortDesc)
     else { setSortCol(col); setSortDesc(true) }
@@ -358,6 +611,46 @@ export default function FactorLibrary() {
     if (!lastComputeTime) return '--'
     return new Date(lastComputeTime * 1000).toLocaleString()
   }
+  const researchState = researchStatus?.status === 'running'
+    ? 'running'
+    : (researchStatus?.last_run_status || 'idle')
+  const researchStateMeta = getResearchStatusMeta(researchState, isZh)
+  const researchTopFactor = researchStatus?.last_top_factor
+  const researchLeaderboard = researchStatus?.last_result?.ranked_results?.slice(0, 3) || []
+  const portfolioLeaderboard: FactorPortfolioCandidate[] = (
+    researchStatus?.last_result?.portfolio_ranked_results
+    || portfolioSnapshot?.portfolio_candidates
+    || []
+  ).slice(0, 3)
+  const researchTopPortfolio: FactorPortfolioCandidate | null = (
+    researchStatus?.last_result?.top_portfolio
+    || researchStatus?.last_top_portfolio
+    || portfolioSnapshot?.top_portfolio
+    || null
+  ) as FactorPortfolioCandidate | null
+  const topPortfolioId = (researchTopPortfolio?.portfolio_id || researchTopPortfolio?.id || 0) as number
+  const researchConfig = researchStatus?.config || DEFAULT_RESEARCH_RUN_CONFIG
+  const researchProgress = researchStatus?.progress as FactorResearchProgress | null
+  const researchLoopHours = researchStatus?.interval_seconds
+    ? (researchStatus.interval_seconds / 3600).toFixed(researchStatus.interval_seconds % 3600 === 0 ? 0 : 1)
+    : '--'
+  const researchIsRunning = researchStatus?.status === 'running'
+  const researchPhaseLabel = getResearchPhaseLabel(researchProgress?.phase, isZh)
+  const researchProgressPercent = researchProgress?.total && researchProgress.total > 0
+    ? Math.max(0, Math.min(100, Math.round(((researchProgress.current || 0) / researchProgress.total) * 100)))
+    : null
+  const researchCandidateFlow = researchIsRunning
+    ? (
+      researchProgress?.fast_candidate_count && researchProgress?.full_backtest_candidate_count
+        ? `${researchProgress.fast_candidate_count} -> ${researchProgress.full_backtest_candidate_count}`
+        : (researchProgress?.candidate_count ? `${researchProgress.candidate_count}` : '--')
+    )
+    : (
+      researchStatus?.last_result?.fast_candidate_count && researchStatus?.last_result?.full_backtest_candidate_count
+        ? `${researchStatus.last_result.fast_candidate_count} -> ${researchStatus.last_result.full_backtest_candidate_count}`
+        : `${researchStatus?.last_result?.candidate_count ?? 0}`
+    )
+  const suggestedAccountId = availableAccounts[0]?.id || deployAccountId || 1
 
   if (loading && !library) {
     return <div className="flex items-center justify-center h-40 text-muted-foreground">{t('factors.loading')}</div>
@@ -439,6 +732,338 @@ export default function FactorLibrary() {
             {countdown && ` | ${t('factors.nextCompute')}: ${countdown}`}
           </span>
         </div>
+
+        {exchange === 'hyperliquid' && (
+          <div className="rounded-xl border border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 via-background to-cyan-500/5 p-4 space-y-4">
+            <div className="flex flex-wrap items-start gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-emerald-500" />
+                  <h3 className="text-sm font-semibold">
+                    {isZh ? '因子研究回测' : 'Factor Research Backtest'}
+                  </h3>
+                  <Badge variant="outline" className={researchStateMeta.className}>
+                    {researchStateMeta.label}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {isZh
+                    ? 'Hyperliquid 24h成交量前20 · 180天 · 内置因子 · 目标：收益/回撤'
+                    : 'Hyperliquid top 20 by 24h volume · 180 days · built-in factors · objective: return/drawdown'}
+                </p>
+              </div>
+
+              <div className="ml-auto flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadResearchStatus(true)}
+                  disabled={researchStatusLoading || researchStarting}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1 ${researchStatusLoading ? 'animate-spin' : ''}`} />
+                  {isZh ? '刷新研究状态' : 'Refresh research'}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleResearchRun}
+                  disabled={researchStarting || researchIsRunning}
+                >
+                  {researchStarting || researchIsRunning ? (
+                    <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5 mr-1" />
+                  )}
+                  {researchIsRunning
+                    ? (isZh ? '研究运行中' : 'Research running')
+                    : (isZh ? '手动触发一轮' : 'Run once now')}
+                </Button>
+              </div>
+            </div>
+
+            {researchActionError && (
+              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-500">
+                {researchActionError}
+              </div>
+            )}
+
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="rounded-lg border bg-background/70 p-3">
+                <div className="text-xs text-muted-foreground">
+                  {isZh ? '研究配置' : 'Research scope'}
+                </div>
+                <div className="mt-1 text-sm font-medium">
+                  Top {researchConfig.top_n_symbols} / {researchConfig.lookback_days}d / {researchConfig.period}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-background/70 p-3">
+                <div className="text-xs text-muted-foreground">
+                  {isZh ? '自动循环间隔' : 'Loop interval'}
+                </div>
+                <div className="mt-1 text-sm font-medium">
+                  {researchLoopHours}h
+                </div>
+              </div>
+              <div className="rounded-lg border bg-background/70 p-3">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Clock3 className="h-3 w-3" />
+                  {isZh ? '最近启动' : 'Last started'}
+                </div>
+                <div className="mt-1 text-sm font-medium">
+                  {formatResearchTimestamp(researchStatus?.last_run_started_at)}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-background/70 p-3">
+                <div className="text-xs text-muted-foreground">
+                  {isZh ? '最近完成 / 候选数' : 'Last completed / candidates'}
+                </div>
+                <div className="mt-1 text-sm font-medium">
+                  {formatResearchTimestamp(researchStatus?.last_run_completed_at)}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {researchStatus?.last_result?.candidate_count ?? 0} {isZh ? '个候选因子' : 'candidates'}
+                </div>
+              </div>
+            </div>
+
+            {researchIsRunning && researchProgress && (
+              <div className="rounded-lg border bg-background/80 p-4 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-cyan-500" />
+                  <span className="text-sm font-semibold">
+                    {isZh ? '当前进度' : 'Current progress'}
+                  </span>
+                  <Badge variant="secondary">{researchPhaseLabel}</Badge>
+                  {researchProgress.current != null && researchProgress.total != null && (
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {researchProgress.current}/{researchProgress.total}
+                    </span>
+                  )}
+                </div>
+
+                {researchProgressPercent != null && (
+                  <div className="w-full rounded-full bg-muted h-2 overflow-hidden">
+                    <div
+                      className="h-2 bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all"
+                      style={{ width: `${researchProgressPercent}%` }}
+                    />
+                  </div>
+                )}
+
+                <div className="grid gap-3 md:grid-cols-4 text-sm">
+                  <div className="rounded-lg border bg-background/70 p-3">
+                    <div className="text-xs text-muted-foreground">{isZh ? '当前 Symbol' : 'Current symbol'}</div>
+                    <div className="mt-1 font-medium font-mono">{researchProgress.current_symbol || '--'}</div>
+                  </div>
+                  <div className="rounded-lg border bg-background/70 p-3">
+                    <div className="text-xs text-muted-foreground">{isZh ? '当前因子' : 'Current factor'}</div>
+                    <div className="mt-1 font-medium font-mono break-all">{researchProgress.current_factor || '--'}</div>
+                  </div>
+                  <div className="rounded-lg border bg-background/70 p-3">
+                    <div className="text-xs text-muted-foreground">{isZh ? '阶段候选' : 'Stage candidates'}</div>
+                    <div className="mt-1 font-medium font-mono">{researchCandidateFlow}</div>
+                  </div>
+                  <div className="rounded-lg border bg-background/70 p-3">
+                    <div className="text-xs text-muted-foreground">{isZh ? '快筛设置' : 'Fast stage'}</div>
+                    <div className="mt-1 font-medium font-mono">
+                      {researchProgress.fast_backtest_days
+                        ? `${researchProgress.fast_backtest_days}d / ${researchProgress.fast_backtest_symbol_count ?? '--'}`
+                        : '--'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {researchTopFactor ? (
+              <div className="rounded-lg border bg-background/80 p-4 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Trophy className="h-4 w-4 text-amber-500" />
+                  <span className="text-sm font-semibold">
+                    {isZh ? '当前最优因子' : 'Current winner'}
+                  </span>
+                  <Badge variant="secondary" className="font-mono">
+                    {researchTopFactor.factor_name}
+                  </Badge>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-5">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Score</div>
+                    <div className="text-base font-semibold font-mono">{researchTopFactor.score?.toFixed(4) ?? '--'}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">{isZh ? '收益' : 'Return'}</div>
+                    <div className="text-base font-semibold font-mono text-emerald-600">{researchTopFactor.total_pnl_percent?.toFixed(2) ?? '--'}%</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">{isZh ? '回撤' : 'Drawdown'}</div>
+                    <div className="text-base font-semibold font-mono text-red-500">{researchTopFactor.max_drawdown_percent?.toFixed(2) ?? '--'}%</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Sharpe</div>
+                    <div className="text-base font-semibold font-mono">{researchTopFactor.sharpe_ratio?.toFixed(2) ?? '--'}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">{isZh ? '交易数' : 'Trades'}</div>
+                    <div className="text-base font-semibold font-mono">{researchTopFactor.total_trades ?? '--'}</div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed bg-background/60 px-4 py-3 text-sm text-muted-foreground">
+                {researchIsRunning
+                  ? (isZh
+                    ? '后台正在运行 20 币种 / 180 天的真实研究，完成后这里会自动显示最佳因子和排行榜。'
+                    : 'The real 20-symbol / 180-day research run is active in the background. The winner and leaderboard will appear here automatically.')
+                  : (isZh
+                    ? '还没有完成的研究结果。点击“手动触发一轮”开始筛选并回测。'
+                    : 'No completed research result yet. Click "Run once now" to start the screen-and-backtest cycle.')}
+              </div>
+            )}
+
+            <div className="rounded-lg border bg-background/80 p-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Rocket className="h-4 w-4 text-indigo-500" />
+                <span className="text-sm font-semibold">
+                  {isZh ? '自动组合部署' : 'Auto Portfolio Deployment'}
+                </span>
+                {portfolioLoading && (
+                  <Badge variant="outline" className="text-xs">
+                    {isZh ? '加载中' : 'Loading'}
+                  </Badge>
+                )}
+              </div>
+
+              {researchTopPortfolio ? (
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-lg border bg-background/70 p-3">
+                    <div className="text-xs text-muted-foreground">{isZh ? '组合名称' : 'Portfolio'}</div>
+                    <div className="mt-1 text-sm font-semibold break-all">{researchTopPortfolio.name}</div>
+                    <div className="mt-1 text-xs text-muted-foreground font-mono">
+                      {researchTopPortfolio.construction_method}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border bg-background/70 p-3">
+                    <div className="text-xs text-muted-foreground">Score</div>
+                    <div className="mt-1 text-sm font-semibold font-mono">
+                      {researchTopPortfolio.score?.toFixed?.(4) ?? '--'}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {isZh ? '组件数' : 'Components'}: {researchTopPortfolio.component_count ?? researchTopPortfolio.weights?.length ?? 0}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border bg-background/70 p-3 space-y-2">
+                    <div className="text-xs text-muted-foreground">{isZh ? '部署账户ID' : 'Deploy account id'}</div>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={deployAccountId || suggestedAccountId}
+                      onChange={(e) => setDeployAccountId(Number(e.target.value || 0))}
+                      className="h-8"
+                    />
+                    {availableAccounts.length > 0 && (
+                      <div className="text-[11px] text-muted-foreground">
+                        {isZh ? '可用账户' : 'Available'}:
+                        {' '}
+                        {availableAccounts.map((row) => `${row.name}(#${row.id})`).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  {isZh ? '暂无可部署组合，请先完成研究。' : 'No deployable portfolio yet. Complete a research run first.'}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  disabled={!topPortfolioId || portfolioActionLoading !== null}
+                  onClick={() => handleDeployPortfolioPaper(topPortfolioId)}
+                >
+                  {portfolioActionLoading === 'paper'
+                    ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    : <Play className="h-3.5 w-3.5 mr-1" />}
+                  {isZh ? '部署到纸面' : 'Deploy to paper'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!topPortfolioId || portfolioActionLoading !== null}
+                  onClick={() => handleDeployPortfolioLive(topPortfolioId)}
+                >
+                  {portfolioActionLoading === 'live'
+                    ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    : <Rocket className="h-3.5 w-3.5 mr-1" />}
+                  {isZh ? '部署到实盘' : 'Deploy to live'}
+                </Button>
+              </div>
+
+              {portfolioActionError && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-500">
+                  {portfolioActionError}
+                </div>
+              )}
+              {portfolioActionSuccess && (
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600">
+                  {portfolioActionSuccess}
+                </div>
+              )}
+
+              {portfolioLeaderboard.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold">
+                    {isZh ? '组合排行榜' : 'Portfolio leaderboard'}
+                  </div>
+                  <div className="grid gap-2">
+                    {portfolioLeaderboard.map((row, index) => (
+                      <div key={`${row.name}-${index}`} className="flex flex-wrap items-center gap-3 rounded-lg border bg-background/70 px-3 py-2 text-sm">
+                        <Badge variant="outline" className="font-mono">#{index + 1}</Badge>
+                        <span className="font-medium min-w-[130px]">{row.name}</span>
+                        <span className="font-mono text-muted-foreground">score {row.score?.toFixed?.(4) ?? '--'}</span>
+                        <span className="font-mono text-muted-foreground">{row.construction_method}</span>
+                        <span className="font-mono text-muted-foreground">
+                          {isZh ? '组件' : 'components'} {row.component_count ?? row.weights?.length ?? 0}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {researchStatus?.last_error && (
+              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-500">
+                <div className="flex items-center gap-1 font-medium">
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                  {isZh ? '最近一次运行报错' : 'Last run error'}
+                </div>
+                <div className="mt-1 break-all">{researchStatus.last_error}</div>
+              </div>
+            )}
+
+            {researchLeaderboard.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-semibold">
+                  {isZh ? '最近一次排行榜' : 'Latest leaderboard'}
+                </div>
+                <div className="grid gap-2">
+                  {researchLeaderboard.map((row: FactorResearchRankedResult, index: number) => (
+                    <div key={`${row.factor_name}-${index}`} className="flex flex-wrap items-center gap-3 rounded-lg border bg-background/70 px-3 py-2 text-sm">
+                      <Badge variant="outline" className="font-mono">#{index + 1}</Badge>
+                      <span className="min-w-[120px] font-medium">{row.factor_name}</span>
+                      <span className="font-mono text-muted-foreground">score {row.score?.toFixed(4) ?? '--'}</span>
+                      <span className="font-mono text-emerald-600">pnl {row.total_pnl_percent?.toFixed(2) ?? '--'}%</span>
+                      <span className="font-mono text-red-500">dd {row.max_drawdown_percent?.toFixed(2) ?? '--'}%</span>
+                      <span className="font-mono text-muted-foreground">sharpe {row.sharpe_ratio?.toFixed(2) ?? '--'}</span>
+                      <span className="font-mono text-muted-foreground">{row.total_trades ?? '--'} {isZh ? '笔' : 'trades'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Compute dialog */}
         <Dialog open={computeDialogOpen} onOpenChange={(open) => {

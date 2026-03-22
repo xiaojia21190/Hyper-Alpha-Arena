@@ -1088,6 +1088,201 @@ export async function updateBinanceWatchlist(symbols: string[]): Promise<Binance
   return response.json()
 }
 
+export interface FactorResearchRunConfig {
+  exchange: string
+  top_n_symbols: number
+  lookback_days: number
+  objective: string
+  factor_scope: string
+  period: string
+  prescreen_limit: number
+  auto_promote_paper?: boolean
+  paper_account_id?: number
+}
+
+export interface FactorResearchRankedResult {
+  factor_name: string
+  score: number
+  total_pnl_percent: number
+  max_drawdown_percent: number
+  sharpe_ratio: number
+  total_trades: number
+  symbols_tested?: number
+  success?: boolean
+  avg_ic_mean?: number | null
+  avg_icir?: number | null
+  symbols_with_effectiveness?: number
+}
+
+export interface FactorResearchResult {
+  run_id?: number | null
+  exchange: string
+  symbols: string[]
+  top_n_symbols: number
+  lookback_days: number
+  objective: string
+  factor_scope: string
+  candidate_count: number
+  fast_candidate_count?: number
+  full_backtest_candidate_count?: number
+  fast_backtest_days?: number | null
+  fast_backtest_symbol_count?: number | null
+  fast_ranked_results?: FactorResearchRankedResult[]
+  ranked_results: FactorResearchRankedResult[]
+  top_factor: FactorResearchRankedResult | null
+  portfolio_candidates?: FactorPortfolioCandidate[]
+  portfolio_ranked_results?: FactorPortfolioCandidate[]
+  top_portfolio?: FactorPortfolioCandidate | null
+  auto_paper_deployment?: FactorPortfolioDeploymentResult | null
+}
+
+export interface FactorResearchProgress {
+  phase: string
+  current?: number | null
+  total?: number | null
+  current_factor?: string | null
+  current_symbol?: string | null
+  factor_completed?: number | null
+  factor_total?: number | null
+  candidate_count?: number | null
+  fast_candidate_count?: number | null
+  full_backtest_candidate_count?: number | null
+  fast_backtest_days?: number | null
+  fast_backtest_symbol_count?: number | null
+  effectiveness_status?: string | null
+  updated_at?: number | null
+  error?: string | null
+}
+
+export interface FactorResearchStatus {
+  enabled: boolean
+  status: string
+  interval_seconds: number | null
+  config: FactorResearchRunConfig
+  last_run_status: string | null
+  last_run_started_at: number | null
+  last_run_completed_at: number | null
+  last_error: string | null
+  last_top_factor: FactorResearchRankedResult | null
+  last_top_portfolio?: FactorPortfolioCandidate | null
+  last_result: FactorResearchResult | null
+  progress: FactorResearchProgress | null
+}
+
+export interface FactorResearchTriggerResponse {
+  status: 'started' | 'already_running'
+  config: FactorResearchRunConfig
+}
+
+export interface FactorPortfolioComponent {
+  factor_name: string
+  category?: string
+  weight: number
+  factor_score?: number
+  sharpe_ratio?: number
+  total_pnl_percent?: number
+  max_drawdown_percent?: number
+  total_trades?: number
+}
+
+export interface FactorPortfolioCandidate {
+  id?: number
+  portfolio_id?: number
+  run_id?: number
+  name: string
+  construction_method: string
+  score: number
+  component_count?: number
+  weights: FactorPortfolioComponent[]
+  weighted_total_pnl_percent?: number
+  weighted_max_drawdown_percent?: number
+  weighted_sharpe_ratio?: number
+  rationale?: {
+    summary?: string
+    construction_method?: string
+    component_count?: number
+  } | null
+  is_recommended?: boolean
+}
+
+export interface FactorPortfolioDeploymentResult {
+  deployment: {
+    id: number
+    run_id?: number | null
+    portfolio_id: number
+    account_id: number
+    mode: 'paper' | 'live'
+    status: string
+    program_id?: number | null
+    binding_id?: number | null
+    created_at?: string | null
+  }
+  program: { id: number; name?: string }
+  binding: { id: number; account_id: number; program_id: number }
+  portfolio: FactorPortfolioCandidate
+}
+
+export interface FactorPortfolioLatestResponse {
+  run: Record<string, unknown>
+  portfolio_candidates: FactorPortfolioCandidate[]
+  top_portfolio: FactorPortfolioCandidate | null
+}
+
+export async function getFactorResearchStatus(): Promise<FactorResearchStatus> {
+  const response = await apiRequest('/factor-research/status')
+  return response.json()
+}
+
+export async function triggerFactorResearchRun(
+  config: FactorResearchRunConfig
+): Promise<FactorResearchTriggerResponse> {
+  const response = await apiRequest('/factor-research/run', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  })
+  return response.json()
+}
+
+export async function getLatestFactorPortfolioRun(): Promise<FactorPortfolioLatestResponse> {
+  const response = await apiRequest('/factor-portfolios/latest')
+  return response.json()
+}
+
+export async function deployFactorPortfolioPaper(
+  portfolioId: number,
+  payload: {
+    account_id: number
+    period?: string
+    trigger_interval?: number
+    signal_pool_ids?: number[]
+    exchange?: string
+  }
+): Promise<FactorPortfolioDeploymentResult> {
+  const response = await apiRequest(`/factor-portfolios/${portfolioId}/deploy-paper`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return response.json()
+}
+
+export async function deployFactorPortfolioLive(
+  portfolioId: number,
+  payload: {
+    account_id: number
+    confirm_live: boolean
+    period?: string
+    trigger_interval?: number
+    signal_pool_ids?: number[]
+    exchange?: string
+  }
+): Promise<FactorPortfolioDeploymentResult> {
+  const response = await apiRequest(`/factor-portfolios/${portfolioId}/deploy-live`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return response.json()
+}
+
 // Legacy aliases for backward compatibility
 export type AIAccount = TradingAccount
 export type AIAccountCreate = TradingAccountCreate
