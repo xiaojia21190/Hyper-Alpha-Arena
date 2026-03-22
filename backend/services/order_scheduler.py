@@ -3,7 +3,6 @@ Order scheduling service
 Background task for periodically processing pending orders
 """
 
-import asyncio
 import threading
 import time
 import logging

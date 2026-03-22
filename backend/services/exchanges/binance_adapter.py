@@ -14,7 +14,6 @@ from datetime import datetime
 from .base_adapter import (
     BaseExchangeAdapter,
     UnifiedKline,
-    UnifiedTrade,
     UnifiedOrderbook,
     UnifiedFunding,
     UnifiedOpenInterest,

@@ -17,7 +17,6 @@ from services.bot_service import (
 )
 from services.telegram_bot_service import (
     validate_telegram_token,
-    setup_telegram_webhook,
     remove_telegram_webhook,
     send_telegram_message,
 )
@@ -301,7 +300,7 @@ async def connect_telegram_bot(
     # Create or get the shared Bot conversation (one per user, shared across platforms)
     from database.models import HyperAiConversation
     bot_conv = db.query(HyperAiConversation).filter(
-        HyperAiConversation.is_bot_conversation == True
+        HyperAiConversation.is_bot_conversation
     ).first()
     if not bot_conv:
         bot_conv = HyperAiConversation(
@@ -406,7 +405,6 @@ async def _process_telegram_message(
     Reply unicast: response only goes to the originating chat_id.
     """
     from services.hyper_ai_service import (
-        get_or_create_conversation,
         stream_chat_response,
     )
     from database.models import HyperAiConversation, BotChatBinding
@@ -436,7 +434,7 @@ async def _process_telegram_message(
 
         # Find the shared Bot conversation (shared across all platforms)
         conv = db_session.query(HyperAiConversation).filter(
-            HyperAiConversation.is_bot_conversation == True
+            HyperAiConversation.is_bot_conversation
         ).first()
 
         if not conv:
@@ -562,7 +560,7 @@ async def connect_discord_bot(
     # Create or get the shared Bot conversation (one per user, shared across platforms)
     from database.models import HyperAiConversation
     bot_conv = db.query(HyperAiConversation).filter(
-        HyperAiConversation.is_bot_conversation == True
+        HyperAiConversation.is_bot_conversation
     ).first()
     if not bot_conv:
         bot_conv = HyperAiConversation(
@@ -632,7 +630,7 @@ async def _process_discord_message_internal(
 
         # Find the shared Bot conversation
         conv = db_session.query(HyperAiConversation).filter(
-            HyperAiConversation.is_bot_conversation == True
+            HyperAiConversation.is_bot_conversation
         ).first()
 
         if not conv:

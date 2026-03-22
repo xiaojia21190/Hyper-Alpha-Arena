@@ -11,7 +11,6 @@ from program_trader import (
     validate_strategy_code,
     execute_strategy,
     MarketData,
-    Decision,
     ActionType,
 )
 

@@ -10,8 +10,6 @@ import time
 from datetime import datetime, timezone
 from typing import Iterable, List, Optional
 
-from database.connection import SessionLocal
-from database.models import CryptoPriceTick
 from services.hyperliquid_market_data import get_default_hyperliquid_client
 from services.price_cache import record_price_update
 from services.market_events import publish_price_update

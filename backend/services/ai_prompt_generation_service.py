@@ -20,7 +20,6 @@ from services.ai_decision_service import (
     build_chat_completion_endpoints,
     detect_api_format,
     _extract_text_from_message,
-    get_max_tokens,
     build_llm_payload,
     build_llm_headers,
     extract_reasoning,
@@ -461,7 +460,7 @@ def _execute_preview_prompt(args: Dict[str, Any], request_id: str) -> str:
     for var in variables:
         if var in ACCOUNT_VARIABLES:
             placeholder_vars.append(var)
-        elif f"{{{var}}}" in rendered or f"[PLACEHOLDER" in context.get(var, "") or "N/A" in str(context.get(var, "")):
+        elif f"{{{var}}}" in rendered or "[PLACEHOLDER" in context.get(var, "") or "N/A" in str(context.get(var, "")):
             # Check if variable was not resolved
             if var not in context or context.get(var, "").startswith("["):
                 failed_vars.append(var)
@@ -968,7 +967,7 @@ def generate_prompt_with_ai_stream(
                             try:
                                 suggest_apply_data = json.loads(result)
                                 yield format_sse_event("suggest_apply", {"prompt_text": suggest_apply_data.get("prompt_text", ""), "summary": suggest_apply_data.get("summary", "")})
-                            except:
+                            except Exception:
                                 pass
 
                         yield format_sse_event("tool_result", {"name": tool_name, "result": result[:200] + "..." if len(result) > 200 else result})
@@ -1020,7 +1019,7 @@ def generate_prompt_with_ai_stream(
                         tool_id = tc.get("id", "")
                         try:
                             tool_args = json.loads(func.get("arguments", "{}"))
-                        except:
+                        except Exception:
                             tool_args = {}
 
                         yield format_sse_event("tool_call", {"name": tool_name, "args": tool_args})
@@ -1037,7 +1036,7 @@ def generate_prompt_with_ai_stream(
                             try:
                                 suggest_apply_data = json.loads(result)
                                 yield format_sse_event("suggest_apply", {"prompt_text": suggest_apply_data.get("prompt_text", ""), "summary": suggest_apply_data.get("summary", "")})
-                            except:
+                            except Exception:
                                 pass
 
                         yield format_sse_event("tool_result", {"name": tool_name, "result": result[:200] + "..." if len(result) > 200 else result})
@@ -1203,7 +1202,7 @@ def get_conversation_messages(
         if msg.tool_calls_log:
             try:
                 msg_data["tool_calls_log"] = json.loads(msg.tool_calls_log)
-            except:
+            except Exception:
                 pass
         # Include reasoning_snapshot if present
         if msg.reasoning_snapshot:

@@ -15,9 +15,9 @@ import os
 # Add parent directory to path so we can import from backend
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import create_engine, text, inspect
+from sqlalchemy import text, inspect
 from database.connection import DATABASE_URL, engine
-from database.models import Base, HyperliquidAccountSnapshot, HyperliquidPosition
+from database.models import HyperliquidAccountSnapshot, HyperliquidPosition
 import logging
 
 logging.basicConfig(level=logging.INFO)

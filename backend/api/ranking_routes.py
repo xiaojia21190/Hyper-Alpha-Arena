@@ -1,11 +1,10 @@
 """
 Ranking API routes for factor-based crypto rankings
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Optional
 import pandas as pd
-import requests
 from datetime import datetime, timedelta
 
 from database.connection import get_db

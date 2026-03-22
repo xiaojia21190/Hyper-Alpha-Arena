@@ -155,7 +155,6 @@ class BinanceWSCollector:
 
     def _ws_loop(self):
         """WebSocket connection loop running in separate thread"""
-        import websocket
 
         while self.running:
             try:

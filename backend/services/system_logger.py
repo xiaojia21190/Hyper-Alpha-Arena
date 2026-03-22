@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Dict, List, Optional, Deque
 from dataclasses import dataclass, asdict
 import threading
-import json
 
 
 @dataclass

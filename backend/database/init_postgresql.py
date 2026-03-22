@@ -8,7 +8,7 @@ import sys
 import logging
 import os
 from sqlalchemy import create_engine, text, inspect
-from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.exc import OperationalError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -203,8 +203,6 @@ def create_tables():
         # Import models to register them with SQLAlchemy
         from database.connection import engine, Base
         from database.snapshot_connection import snapshot_engine, SnapshotBase
-        from database import models  # This imports all model definitions
-        from database import snapshot_models  # This imports snapshot model definitions
 
         # Create main database tables
         logger.info("Creating main database tables...")

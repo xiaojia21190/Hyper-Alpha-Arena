@@ -5,7 +5,7 @@ Market Regime Classification API routes
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 import logging
 
 from database.connection import SessionLocal

@@ -5,7 +5,6 @@ Handles bidirectional conversion between internal symbol format (e.g., "BTC")
 and exchange-specific formats (e.g., "BTCUSDT" for Binance).
 """
 
-from typing import Dict, Optional
 import logging
 
 logger = logging.getLogger(__name__)

@@ -4,7 +4,6 @@ K线数据补漏管理器 - 处理后台补漏任务
 
 import asyncio
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
 from typing import Optional
 import logging
 

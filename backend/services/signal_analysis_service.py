@@ -6,12 +6,10 @@ set appropriate signal thresholds.
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 from datetime import datetime
-from decimal import Decimal
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -161,8 +159,7 @@ class SignalAnalysisService:
         exchange: str = "hyperliquid"
     ) -> tuple[List[float], float]:
         """Get historical values for a metric. Returns (values, time_range_hours)."""
-        from services.market_flow_indicators import TIMEFRAME_MS, floor_timestamp
-        from database.models import MarketAssetMetrics, MarketTradesAggregated, MarketOrderbookSnapshots
+        from services.market_flow_indicators import TIMEFRAME_MS
 
         if period not in TIMEFRAME_MS:
             raise ValueError(f"Unsupported period: {period}")
@@ -584,11 +581,11 @@ class SignalAnalysisService:
             if bucket_ts not in buckets:
                 buckets[bucket_ts] = {"high": None, "low": None}
             h = float(high_price)
-            l = float(low_price)
+            low_value = float(low_price)
             if buckets[bucket_ts]["high"] is None or h > buckets[bucket_ts]["high"]:
                 buckets[bucket_ts]["high"] = h
-            if buckets[bucket_ts]["low"] is None or l < buckets[bucket_ts]["low"]:
-                buckets[bucket_ts]["low"] = l
+            if buckets[bucket_ts]["low"] is None or low_value < buckets[bucket_ts]["low"]:
+                buckets[bucket_ts]["low"] = low_value
 
         sorted_times = sorted(buckets.keys())
         values = []

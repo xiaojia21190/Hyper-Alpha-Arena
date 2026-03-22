@@ -14,7 +14,6 @@ Usage:
 """
 import sys
 import os
-import json
 import shutil
 from datetime import datetime
 

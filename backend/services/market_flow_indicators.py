@@ -20,7 +20,6 @@ import logging
 from decimal import Decimal
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from database.models import (
     MarketTradesAggregated,

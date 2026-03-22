@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
 from typing import List, Optional
 from database.models import PerpFunding
-from database.connection import get_db
 import time
 
 

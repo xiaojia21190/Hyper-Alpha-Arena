@@ -9,7 +9,6 @@ from typing import Optional
 from database.connection import SessionLocal
 from database.models import HyperliquidBackfillTask
 from services.hyperliquid_market_data import get_kline_data_from_hyperliquid
-from services.hyperliquid_symbol_service import get_selected_symbols
 
 logger = logging.getLogger(__name__)
 

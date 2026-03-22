@@ -7,9 +7,8 @@ the required methods for data fetching and format conversion.
 
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Dict, List, Optional, Any
+from typing import List, Optional
 from dataclasses import dataclass
-from datetime import datetime
 
 
 @dataclass

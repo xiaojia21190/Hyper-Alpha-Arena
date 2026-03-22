@@ -6,7 +6,6 @@ from .hyperliquid_market_data import (
     get_market_status_from_hyperliquid,
     get_all_symbols_from_hyperliquid,
     get_ticker_data_from_hyperliquid,
-    get_default_hyperliquid_client,
 )
 
 logger = logging.getLogger(__name__)

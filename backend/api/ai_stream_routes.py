@@ -9,7 +9,6 @@ Endpoints:
 - GET /api/ai-stream/{task_id}/status - Get task status only
 """
 from fastapi import APIRouter, Query, HTTPException
-from typing import Optional
 from services.ai_stream_service import get_buffer_manager
 
 router = APIRouter(prefix="/api/ai-stream", tags=["AI Stream"])

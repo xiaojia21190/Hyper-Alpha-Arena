@@ -5,11 +5,9 @@ Provides price sampling data database operations for persistent sampling pools
 
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc, func
-from typing import List, Optional
+from typing import List
 from database.models import PriceSample
-from database.connection import get_db
 from datetime import datetime, timedelta
-import time
 
 
 class SampleRepository:

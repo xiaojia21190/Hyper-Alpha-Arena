@@ -19,11 +19,11 @@ from sqlalchemy import text
 
 from database.models import (
     AiAttributionConversation, AiAttributionMessage,
-    Account, AIDecisionLog, PromptTemplate, SignalPool
+    Account, AIDecisionLog, SignalPool
 )
 from database.snapshot_connection import SnapshotSessionLocal
 from database.snapshot_models import HyperliquidTrade
-from services.ai_decision_service import build_chat_completion_endpoints, detect_api_format, _extract_text_from_message, get_max_tokens, build_llm_payload, build_llm_headers, extract_reasoning, convert_tools_to_anthropic, convert_messages_to_anthropic, strip_thinking_tags
+from services.ai_decision_service import build_chat_completion_endpoints, detect_api_format, _extract_text_from_message, build_llm_payload, build_llm_headers, extract_reasoning, convert_tools_to_anthropic, convert_messages_to_anthropic, strip_thinking_tags
 
 logger = logging.getLogger(__name__)
 
@@ -515,7 +515,7 @@ def _tool_get_signal_pool_config(db: Session, args: Dict) -> str:
     if pool.signal_ids:
         try:
             signal_ids = json.loads(pool.signal_ids) if isinstance(pool.signal_ids, str) else pool.signal_ids
-        except:
+        except Exception:
             pass
 
     # Parse symbols JSON
@@ -523,7 +523,7 @@ def _tool_get_signal_pool_config(db: Session, args: Dict) -> str:
     if pool.symbols:
         try:
             symbols = json.loads(pool.symbols) if isinstance(pool.symbols, str) else pool.symbols
-        except:
+        except Exception:
             pass
 
     # Fetch detailed signal configurations
@@ -538,7 +538,7 @@ def _tool_get_signal_pool_config(db: Session, args: Dict) -> str:
             if isinstance(trigger_condition, str):
                 try:
                     trigger_condition = json.loads(trigger_condition)
-                except:
+                except Exception:
                     pass
             signals_detail.append({
                 "id": row[0],
@@ -608,7 +608,7 @@ def _tool_get_trade_decision_chain(db: Session, args: Dict) -> str:
                 entry_price = snapshot.get("max_price") or snapshot.get("entry_price")
                 tp_price = snapshot.get("take_profit_price") or snapshot.get("tp_price")
                 sl_price = snapshot.get("stop_loss_price") or snapshot.get("sl_price")
-            except:
+            except Exception:
                 pass
 
         trades.append({
@@ -743,7 +743,7 @@ def extract_diagnosis_results(content: str) -> List[Dict]:
             card = json.loads(match.strip())
             card["_type"] = "diagnosis"
             results.append(card)
-        except:
+        except Exception:
             pass
 
     # Extract prompt suggestions
@@ -753,7 +753,7 @@ def extract_diagnosis_results(content: str) -> List[Dict]:
             suggestion = json.loads(match.strip())
             suggestion["_type"] = "prompt_suggestion"
             results.append(suggestion)
-        except:
+        except Exception:
             pass
 
     return results
@@ -1042,7 +1042,7 @@ def generate_attribution_analysis_stream(
                         func_name = tc["function"]["name"]
                         try:
                             func_args = json.loads(tc["function"]["arguments"])
-                        except:
+                        except Exception:
                             func_args = {}
                         yield f"event: tool_call\ndata: {json.dumps({'name': func_name, 'arguments': func_args})}\n\n"
                         result = _execute_tool(db, func_name, func_args)
@@ -1125,7 +1125,7 @@ def get_attribution_messages(db: Session, conversation_id: int, user_id: int = 1
         if m.diagnosis_result:
             try:
                 msg_dict["diagnosis_results"] = json.loads(m.diagnosis_result)
-            except:
+            except Exception:
                 pass
         # Include reasoning and tool calls log for history display
         if m.reasoning_snapshot:
@@ -1133,7 +1133,7 @@ def get_attribution_messages(db: Session, conversation_id: int, user_id: int = 1
         if m.tool_calls_log:
             try:
                 msg_dict["tool_calls_log"] = json.loads(m.tool_calls_log)
-            except:
+            except Exception:
                 pass
         if hasattr(m, 'is_complete'):
             msg_dict["is_complete"] = m.is_complete if m.is_complete is not None else True

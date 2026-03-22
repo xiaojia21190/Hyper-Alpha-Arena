@@ -8,15 +8,14 @@ from typing import List
 import logging
 
 from database.connection import SessionLocal
-from database.models import Account
 from repositories.account_repo import (
     create_account, get_account, get_accounts_by_user,
-    update_account, update_account_cash, deactivate_account,
+    update_account, deactivate_account,
     get_or_create_default_account
 )
-from repositories.user_repo import verify_auth_session, get_user
+from repositories.user_repo import verify_auth_session
 from schemas.account import (
-    AccountCreate, AccountUpdate, AccountOut, AccountOverview
+    AccountCreate, AccountUpdate, AccountOut
 )
 from services.hyperliquid_cache import get_cached_account_state
 

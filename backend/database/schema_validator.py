@@ -6,11 +6,10 @@ Compares ORM models with actual database schema and auto-fixes discrepancies.
 NEVER blocks application startup - only logs errors.
 """
 import logging
-from typing import Dict, List, Any, Optional
-from sqlalchemy import text, inspect, Integer, BigInteger, String, Text, Float, DECIMAL, TIMESTAMP
-from sqlalchemy.orm import DeclarativeMeta
+from typing import Dict, List, Any
+from sqlalchemy import text
 
-from .connection import SessionLocal, engine, Base
+from .connection import SessionLocal, Base
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +291,7 @@ def validate_and_sync_schema() -> bool:
 
     # Summary
     logger.info("=" * 60)
-    logger.info(f"Schema Validator Summary:")
+    logger.info("Schema Validator Summary:")
     logger.info(f"  - Missing columns found: {total_missing}")
     logger.info(f"  - Columns auto-fixed: {total_fixed}")
     logger.info(f"  - Type mismatches (warning only): {total_type_mismatch}")

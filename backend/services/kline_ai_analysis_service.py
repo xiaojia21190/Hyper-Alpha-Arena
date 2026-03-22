@@ -2,7 +2,6 @@
 K-line AI Analysis Service - Handles AI-powered chart analysis
 """
 import logging
-import json
 import time
 import random
 from datetime import datetime
@@ -13,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from database.models import Account, KlineAIAnalysisLog
 from config.prompt_templates import KLINE_ANALYSIS_PROMPT_TEMPLATE
-from services.ai_decision_service import build_chat_completion_endpoints, _extract_text_from_message, get_max_tokens, build_llm_payload, build_llm_headers, is_reasoning_model
+from services.ai_decision_service import build_chat_completion_endpoints, _extract_text_from_message, build_llm_payload, build_llm_headers
 from services.market_flow_indicators import get_flow_indicators_for_prompt
 
 
@@ -44,7 +43,7 @@ def _format_klines_summary(klines: List[Dict]) -> str:
             try:
                 dt = datetime.utcfromtimestamp(timestamp)
                 time_str = dt.strftime('%Y-%m-%d %H:%M')
-            except:
+            except Exception:
                 time_str = str(timestamp)
         elif kline.get('datetime'):
             # If datetime string is available, use it
@@ -78,7 +77,7 @@ def _format_klines_summary(klines: List[Dict]) -> str:
         if first_close > 0:
             period_change = ((last_close - first_close) / first_close) * 100
             lines.append("")
-            lines.append(f"--- Period Summary ---")
+            lines.append("--- Period Summary ---")
             lines.append(f"Period Change: {period_change:+.2f}%")
             lines.append(f"High/Low Range: ${lowest:.2f} - ${highest:.2f}")
             lines.append(f"Total Volume: {total_volume:,.0f}")
@@ -403,7 +402,7 @@ def analyze_kline_chart(
 
     try:
         # Build prompt context
-        logger.info(f"[K-line Analysis] Building prompt context...")
+        logger.info("[K-line Analysis] Building prompt context...")
         now = datetime.utcnow()
 
         # respect kline_limit if provided

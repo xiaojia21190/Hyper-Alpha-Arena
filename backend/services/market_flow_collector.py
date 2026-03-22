@@ -16,7 +16,7 @@ import threading
 from decimal import Decimal
 from typing import Dict, List, Optional, Any
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from hyperliquid.info import Info
 
@@ -635,7 +635,6 @@ class MarketFlowCollector:
 
         try:
             from database.connection import SessionLocal
-            from database.models import MarketTradesAggregated, MarketOrderbookSnapshots, MarketAssetMetrics
 
             db = SessionLocal()
             try:

@@ -2,14 +2,14 @@ import asyncio
 import json
 import logging
 import threading
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from typing import Dict, Optional, Set
 
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from database.connection import SessionLocal
-from database.models import AIDecisionLog, Account, CryptoPrice, Trade, User
+from database.models import AIDecisionLog, Trade
 from repositories.account_repo import get_account, get_or_create_default_account
 from repositories.order_repo import list_orders
 from repositories.position_repo import list_positions
@@ -345,7 +345,7 @@ async def _send_snapshot_optimized(db: Session, account_id: int):
             response_data["all_asset_curves"] = get_all_asset_curves_data(db, "1h")
             response_data["type"] = "snapshot_full"  # Indicate this includes full data
         except Exception as e:
-            logger.error(f"Failed to get asset curves: {e}")
+            logging.error(f"Failed to get asset curves: {e}")
 
     if price_error_message:
         response_data["warning"] = {
@@ -749,7 +749,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 logging.error(f"Invalid JSON received: {e}")
                 try:
                     await websocket.send_text(json.dumps({"type": "error", "message": "Invalid JSON format"}))
-                except:
+                except Exception:
                     break
                 continue
             kind = msg.get("type")
@@ -810,7 +810,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     if not u:
                         try:
                             await websocket.send_text(json.dumps({"type": "error", "message": "user not found"}))
-                        except:
+                        except Exception:
                             break
                         continue
                     user_id = uid
@@ -930,7 +930,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Extract order parameters
                         symbol = msg.get("symbol")
                         name = msg.get("name", symbol)  # Use symbol as name if not provided
-                        market = msg.get("market", "CRYPTO")
                         side = msg.get("side")
                         order_type = msg.get("order_type")
                         price = msg.get("price")
@@ -973,7 +972,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Business logic errors (insufficient funds, etc.)
                         try:
                             await websocket.send_text(json.dumps({"type": "error", "message": str(e)}))
-                        except:
+                        except Exception:
                             break
                     except Exception as e:
                         # Unexpected errors
@@ -982,17 +981,17 @@ async def websocket_endpoint(websocket: WebSocket):
                         print(traceback.format_exc())
                         try:
                             await websocket.send_text(json.dumps({"type": "error", "message": f"order placement failed: {str(e)}"}))
-                        except:
+                        except Exception:
                             break
                 elif kind == "ping":
                     try:
                         await websocket.send_text(json.dumps({"type": "pong"}))
-                    except:
+                    except Exception:
                         break
                 else:
                     try:
                         await websocket.send_text(json.dumps({"type": "error", "message": "unknown message"}))
-                    except:
+                    except Exception:
                         break
             finally:
                 db.close()

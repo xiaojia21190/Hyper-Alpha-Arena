@@ -6,7 +6,6 @@ Used to manage WebSocket snapshot updates and other scheduled tasks
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import Dict, Set, Callable, Optional, List
 import logging
 from datetime import date, datetime
@@ -158,7 +157,7 @@ class TaskScheduler:
         start_time = datetime.now()
         try:
             # Dynamic import to avoid circular dependency
-            from api.ws import manager, _send_snapshot_optimized
+            from api.ws import manager
 
             # Check if account still has active connections
             if account_id not in manager.active_connections:
@@ -371,7 +370,7 @@ def start_asset_curve_broadcast():
         finally:
             try:
                 loop.close()
-            except:
+            except Exception:
                 pass
 
     try:
@@ -387,7 +386,7 @@ def start_asset_curve_broadcast():
         # Remove existing job if it exists
         if task_scheduler.scheduler and task_scheduler.scheduler.get_job(ASSET_CURVE_BROADCAST_JOB_ID):
             task_scheduler.remove_task(ASSET_CURVE_BROADCAST_JOB_ID)
-            logger.info(f"Removed existing asset curve broadcast job")
+            logger.info("Removed existing asset curve broadcast job")
 
         # Add the broadcast job
         task_scheduler.add_interval_task(

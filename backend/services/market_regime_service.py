@@ -234,7 +234,7 @@ DIRECTION_NEUTRAL = "neutral"
 def get_default_config(db: Session) -> Optional[MarketRegimeConfig]:
     """Get default regime config from database"""
     return db.query(MarketRegimeConfig).filter(
-        MarketRegimeConfig.is_default == True
+        MarketRegimeConfig.is_default
     ).first()
 
 

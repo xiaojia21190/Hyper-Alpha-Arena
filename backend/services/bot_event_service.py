@@ -4,9 +4,8 @@ Events (signal triggers, AI decisions) are saved as assistant messages
 to the Bot conversation and pushed to all bound channels.
 Push = broadcast to ALL bound channels; Reply = unicast to originating channel.
 """
-import asyncio
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 
 from database.models import HyperAiConversation, HyperAiMessage, BotConfig
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 def get_bot_conversations(db: Session) -> List[HyperAiConversation]:
     """Get all Bot conversations (one per platform)."""
     return db.query(HyperAiConversation).filter(
-        HyperAiConversation.is_bot_conversation == True
+        HyperAiConversation.is_bot_conversation
     ).all()
 
 
@@ -155,7 +154,7 @@ async def push_event_to_all_channels(
 
     # Query all active bindings across all platforms
     bindings = db.query(BotChatBinding).filter(
-        BotChatBinding.is_active == True
+        BotChatBinding.is_active
     ).all()
 
     for binding in bindings:
@@ -188,7 +187,7 @@ async def _push_to_telegram(db: Session, content: str):
 
     bindings = db.query(BotChatBinding).filter(
         BotChatBinding.platform == "telegram",
-        BotChatBinding.is_active == True
+        BotChatBinding.is_active
     ).all()
 
     for binding in bindings:
@@ -210,7 +209,7 @@ async def _push_to_discord(db: Session, content: str):
 
     bindings = db.query(BotChatBinding).filter(
         BotChatBinding.platform == "discord",
-        BotChatBinding.is_active == True
+        BotChatBinding.is_active
     ).all()
 
     for binding in bindings:

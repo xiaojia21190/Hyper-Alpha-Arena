@@ -2,7 +2,6 @@
 K线数据管理API路由
 """
 
-import asyncio
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -94,7 +93,7 @@ async def get_backfill_tasks(db: Session = Depends(get_db)):
     try:
         tasks = db.query(KlineCollectionTask).order_by(KlineCollectionTask.created_at.desc()).limit(50).all()
         return {"tasks": [{"task_id": t.id, "symbol": t.symbol, "status": t.status, "progress": t.progress or 0, "total_records": t.total_records or 0, "collected_records": t.collected_records or 0} for t in tasks]}
-    except Exception as e:
+    except Exception:
         return {"tasks": []}
 
 @router.get("/data")

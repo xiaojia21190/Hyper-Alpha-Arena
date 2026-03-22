@@ -9,7 +9,7 @@ Architecture:
 import asyncio
 import logging
 import re
-from typing import Optional, Callable, Any
+from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -267,14 +267,14 @@ class DiscordAdapter:
         self._token = token
         # Gateway is started separately via start_discord_gateway()
         # This adapter just tracks the token
-        logger.info(f"[DiscordAdapter] Token set, Gateway will be started separately")
+        logger.info("[DiscordAdapter] Token set, Gateway will be started separately")
         return True
 
     async def stop(self) -> None:
         """Stop the Discord Gateway."""
         await stop_discord_gateway()
         self._token = None
-        logger.info(f"[DiscordAdapter] Stopped")
+        logger.info("[DiscordAdapter] Stopped")
 
     def set_message_callback(self, callback: Callable):
         """Set the message handler callback."""

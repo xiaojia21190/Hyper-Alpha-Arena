@@ -16,7 +16,7 @@ backend_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_dir))
 
 from sqlalchemy import text
-from database.connection import SessionLocal, engine
+from database.connection import SessionLocal
 import logging
 
 logging.basicConfig(level=logging.INFO)

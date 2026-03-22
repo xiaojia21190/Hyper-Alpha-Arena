@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from database.models import Account, HyperliquidPosition, HyperliquidWallet, SystemConfig
 from services.hyperliquid_trading_client import (
     HyperliquidTradingClient,
-    create_hyperliquid_client,
     get_cached_trading_client,
     clear_trading_client_cache
 )
@@ -415,9 +414,9 @@ def switch_hyperliquid_environment(
         'status': 'success',
         'account_id': account_id,
         'account_name': account.name,
-        'old_environment': old_env,
+        'old_environment': current_env,
         'new_environment': target_environment,
-        'message': f'Successfully switched from {old_env} to {target_environment}'
+        'message': f'Successfully switched from {current_env} to {target_environment}'
     }
 
 
@@ -555,10 +554,10 @@ def enable_hyperliquid_trading(db: Session, account_id: int) -> Dict[str, Any]:
     env = account.hyperliquid_environment
     if env == "testnet":
         if not account.hyperliquid_testnet_private_key:
-            raise ValueError(f"No testnet private key configured")
+            raise ValueError("No testnet private key configured")
     else:
         if not account.hyperliquid_mainnet_private_key:
-            raise ValueError(f"No mainnet private key configured")
+            raise ValueError("No mainnet private key configured")
 
     account.hyperliquid_enabled = "true"
 

@@ -5,8 +5,7 @@ Binance historical data backfill service
 import asyncio
 import logging
 import time
-from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Optional
 
 from database.connection import SessionLocal
 from database.models import BinanceBackfillTask

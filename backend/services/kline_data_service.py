@@ -2,15 +2,13 @@
 K线数据统一服务层 - 提供统一的数据操作接口
 """
 
-import asyncio
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
 from database.connection import SessionLocal
-from database.models import CryptoKline, UserExchangeConfig, KlineCollectionTask
+from database.models import UserExchangeConfig
 from .kline_collectors import ExchangeDataSourceFactory, BaseKlineCollector, KlineData
 
 logger = logging.getLogger(__name__)

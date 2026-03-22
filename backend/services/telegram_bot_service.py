@@ -12,11 +12,9 @@ import logging
 import re
 from typing import Optional
 
-from sqlalchemy.orm import Session
 
 from database.connection import SessionLocal
-from database.models import BotConfig, HyperAiConversation
-from services.bot_service import get_decrypted_bot_token, update_bot_status
+from database.models import BotConfig
 
 logger = logging.getLogger(__name__)
 
@@ -173,10 +171,9 @@ async def start_telegram_polling(token: str) -> dict:
     # Stop existing polling if any
     await stop_telegram_polling()
 
-    try:
-        from telegram import Update
-        from telegram.ext import Application, MessageHandler, filters
-    except ImportError:
+    import importlib.util
+
+    if importlib.util.find_spec("telegram") is None:
         return {"success": False, "error": "python-telegram-bot not installed"}
 
     try:
@@ -189,7 +186,7 @@ async def start_telegram_polling(token: str) -> dict:
         # Start polling in background task
         _polling_task = asyncio.create_task(_run_polling_loop(token))
 
-        print(f"[Telegram] Polling started", flush=True)
+        print("[Telegram] Polling started", flush=True)
         return {"success": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -211,7 +208,7 @@ async def stop_telegram_polling():
         _polling_task = None
 
     _polling_stop_event = None
-    print(f"[Telegram] Polling stopped", flush=True)
+    print("[Telegram] Polling stopped", flush=True)
 
 
 async def _run_polling_loop(token: str):
@@ -227,7 +224,7 @@ async def _run_polling_loop(token: str):
     bot = Bot(token=token)
     offset = 0
 
-    print(f"[Telegram] Polling loop started", flush=True)
+    print("[Telegram] Polling loop started", flush=True)
 
     while not (_polling_stop_event and _polling_stop_event.is_set()):
         try:
@@ -266,7 +263,7 @@ async def _run_polling_loop(token: str):
             # Wait before retry on error
             await asyncio.sleep(5)
 
-    print(f"[Telegram] Polling loop ended", flush=True)
+    print("[Telegram] Polling loop ended", flush=True)
 
 
 async def _process_polling_message(token: str, chat_id: int, text: str, user: dict):
@@ -352,7 +349,7 @@ async def _process_polling_message(token: str, chat_id: int, text: str, user: di
 
         # Find the shared Bot conversation
         conv = db_session.query(HyperAiConversation).filter(
-            HyperAiConversation.is_bot_conversation == True
+            HyperAiConversation.is_bot_conversation
         ).first()
 
         if not conv:
@@ -458,14 +455,14 @@ class TelegramAdapter:
         """Start the adapter with the given token."""
         self._token = token
         self._ready = True
-        logger.info(f"[TelegramAdapter] Started")
+        logger.info("[TelegramAdapter] Started")
         return True
 
     async def stop(self) -> None:
         """Stop the adapter."""
         self._ready = False
         self._token = None
-        logger.info(f"[TelegramAdapter] Stopped")
+        logger.info("[TelegramAdapter] Stopped")
 
 
 # Global adapter instance

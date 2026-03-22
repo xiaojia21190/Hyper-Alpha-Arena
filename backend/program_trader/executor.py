@@ -3,17 +3,16 @@ Sandbox executor for Program Trader.
 Safely executes strategy code with restricted environment.
 """
 
-import ast
 import math
 import time as pytime
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor
 import threading
 import ctypes
 import traceback
 
-from .models import Strategy, MarketData, Decision, ActionType
+from .models import MarketData, Decision, ActionType
 from .validator import validate_strategy_code
 
 

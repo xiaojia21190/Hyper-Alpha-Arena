@@ -4,7 +4,6 @@ K线实时采集服务 - 每分钟定时采集当前K线数据
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import List, Set
 import logging
 
 from .kline_data_service import kline_service

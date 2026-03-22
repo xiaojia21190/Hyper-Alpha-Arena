@@ -9,7 +9,6 @@ import json
 import logging
 import time
 from typing import Dict, List, Optional, Any
-from decimal import Decimal
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -221,7 +220,7 @@ class SignalDetectionService:
             try:
                 print(f"[SignalDetection] Calling callback: {callback}")
                 callback(symbol, pool_trigger, market_data, triggered_signals)
-                print(f"[SignalDetection] Callback completed successfully")
+                print("[SignalDetection] Callback completed successfully")
             except Exception as e:
                 print(f"[SignalDetection] Error in callback: {e}")
                 logger.error(f"Error in signal trigger callback: {e}", exc_info=True)
@@ -616,7 +615,7 @@ class SignalDetectionService:
             try:
                 factor = db.query(CustomFactor).filter(
                     CustomFactor.name == factor_name,
-                    CustomFactor.is_active == True
+                    CustomFactor.is_active
                 ).first()
                 if not factor:
                     logger.warning(f"Factor not found: {factor_name}")

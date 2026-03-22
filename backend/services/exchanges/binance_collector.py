@@ -16,7 +16,6 @@ Both write to the same table with automatic deduplication.
 import logging
 import threading
 from typing import List, Optional
-from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger

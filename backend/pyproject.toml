@@ -43,5 +43,16 @@ dev-dependencies = [
     "ruff",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"main.py" = ["E402"]
+"api/analytics_routes.py" = ["E402"]
+"api/prompt_routes.py" = ["E402"]
+"api/signal_routes.py" = ["E402"]
+"api/trader_data_routes.py" = ["E402"]
+"database/migrations/add_wallet_environment.py" = ["E402"]
+"database/migrations/migrate_to_multi_wallet.py" = ["E402"]
+"services/hyperliquid_trading_client.py" = ["E402"]
+"services/program_execution_service.py" = ["E402"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["main.py"]

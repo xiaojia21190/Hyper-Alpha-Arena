@@ -67,7 +67,7 @@ def get_memories(
     query = db.query(HyperAiMemory)
 
     if active_only:
-        query = query.filter(HyperAiMemory.is_active == True)
+        query = query.filter(HyperAiMemory.is_active)
 
     if category:
         query = query.filter(HyperAiMemory.category == category)
@@ -375,7 +375,7 @@ def enforce_memory_limit(db: Session) -> int:
     Returns number of memories evicted.
     """
     active_count = db.query(HyperAiMemory).filter(
-        HyperAiMemory.is_active == True,
+        HyperAiMemory.is_active,
         HyperAiMemory.category != "user_info"
     ).count()
 
@@ -385,7 +385,7 @@ def enforce_memory_limit(db: Session) -> int:
     excess = active_count - MAX_MEMORIES
     # Get lowest importance memories to evict
     to_evict = db.query(HyperAiMemory).filter(
-        HyperAiMemory.is_active == True,
+        HyperAiMemory.is_active,
         HyperAiMemory.category != "user_info"
     ).order_by(
         HyperAiMemory.importance.asc(),

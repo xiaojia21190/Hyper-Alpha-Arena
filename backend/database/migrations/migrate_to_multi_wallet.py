@@ -9,7 +9,6 @@ This script:
 """
 
 import sys
-import os
 from pathlib import Path
 
 # Add backend directory to path
@@ -18,7 +17,7 @@ sys.path.insert(0, str(backend_dir))
 
 from sqlalchemy import text
 from database.connection import SessionLocal, engine
-from database.models import Base, Account, SystemConfig
+from database.models import Account, SystemConfig
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -205,7 +204,7 @@ def verify_migration():
             """)
         ).fetchall()
 
-        logger.info(f"  Wallet details:")
+        logger.info("  Wallet details:")
         for wallet in wallets:
             logger.info(f"    ID: {wallet[0]}, Account: {wallet[2]} (ID: {wallet[1]}), Address: {wallet[3]}, Max Leverage: {wallet[4]}")
 

@@ -9,7 +9,7 @@ from typing import Optional, Tuple, List
 from sqlalchemy.orm import Session
 import logging
 
-from database.models import Order, Position, Trade, Account, User, CRYPTO_MIN_COMMISSION, CRYPTO_COMMISSION_RATE, CRYPTO_MIN_ORDER_QUANTITY, CRYPTO_LOT_SIZE
+from database.models import Order, Position, Trade, Account, CRYPTO_MIN_COMMISSION, CRYPTO_COMMISSION_RATE
 from .market_data import get_last_price
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ def create_order(db: Session, account: Account, symbol: str, name: str,
 
     # For crypto, allow very small quantities (minimum $1 worth)
     if quantity <= 0:
-        raise ValueError(f"Order quantity must be > 0")
+        raise ValueError("Order quantity must be > 0")
 
     if order_type == "LIMIT" and (price is None or price <= 0):
         raise ValueError("Limit order must specify valid order price")

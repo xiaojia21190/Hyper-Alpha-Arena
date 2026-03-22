@@ -4,7 +4,6 @@ Verification script to simulate what the frontend sees
 This mimics the WebSocket snapshot data that the frontend receives
 """
 
-import json
 from database.connection import SessionLocal
 from database.models import Trade, User, Position, Order
 from services.asset_calculator import calc_positions_value
@@ -42,7 +41,7 @@ def simulate_snapshot_for_user(username: str):
         print(f"📊 SNAPSHOT DATA FOR USER: {username} (id={user.id})")
         print(f"{'='*60}")
         
-        print(f"\n💰 Account Overview:")
+        print("\n💰 Account Overview:")
         print(f"  Initial Capital: ${user.initial_capital:,.2f}")
         print(f"  Current Cash:    ${user.current_cash:,.2f}")
         print(f"  Frozen Cash:     ${user.frozen_cash:,.2f}")
@@ -125,15 +124,15 @@ def simulate_snapshot_for_user(username: str):
             ],
         }
         
-        print(f"\n📤 WebSocket Snapshot Summary:")
+        print("\n📤 WebSocket Snapshot Summary:")
         print(f"  • Trades in payload: {len(snapshot_data['trades'])}")
         print(f"  • Positions in payload: {len(snapshot_data['positions'])}")
         print(f"  • Orders in payload: {len(snapshot_data['orders'])}")
         
         if len(snapshot_data['trades']) > 0:
-            print(f"\n✅ SUCCESS: Trades will be visible in the frontend!")
+            print("\n✅ SUCCESS: Trades will be visible in the frontend!")
         else:
-            print(f"\n⚠️  WARNING: No trades in snapshot - frontend will show empty trade list")
+            print("\n⚠️  WARNING: No trades in snapshot - frontend will show empty trade list")
         
         return snapshot_data
         

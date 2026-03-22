@@ -16,7 +16,7 @@ from decimal import Decimal
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy import func
 from pydantic import BaseModel
 
 from database.connection import SessionLocal

@@ -22,7 +22,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text
-from connection import SessionLocal, engine
+from connection import SessionLocal
 
 
 def upgrade():

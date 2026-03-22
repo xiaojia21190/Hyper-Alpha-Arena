@@ -28,14 +28,12 @@ Architecture (IMPORTANT - read before modifying any AI streaming code):
     to the frontend via polling. To add new event types (e.g. subagent progress), just
     yield them from the generator - no changes needed in this module.
 """
-import asyncio
 import json
 import logging
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Generator, List, Optional
-from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 

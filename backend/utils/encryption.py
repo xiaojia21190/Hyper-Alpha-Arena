@@ -115,7 +115,7 @@ def validate_encryption_setup() -> bool:
         ValueError: If encryption setup invalid
     """
     try:
-        key = get_encryption_key()
+        get_encryption_key()
         # Test encryption/decryption
         test_data = "test_private_key_0x123"
         encrypted = encrypt_private_key(test_data)
