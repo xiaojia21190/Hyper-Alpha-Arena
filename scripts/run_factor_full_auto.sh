@@ -16,7 +16,12 @@ PRESCREEN_LIMIT="${PRESCREEN_LIMIT:-10}"
 WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-1800}"
 POLL_SECONDS="${POLL_SECONDS:-5}"
 OVERRIDE_FILE="${OVERRIDE_FILE:-docker-compose.factor-full.yml}"
+BOOTSTRAP_OVERRIDE_FILE="${BOOTSTRAP_OVERRIDE_FILE:-docker-compose.factor-bootstrap.yml}"
 TIMESTAMP="$(date +%s)"
+NO_BUILD="${NO_BUILD:-true}"
+USE_EXISTING_POSTGRES="${USE_EXISTING_POSTGRES:-true}"
+DATABASE_URL="${DATABASE_URL:-postgresql://postgres:mysecretpassword@192.168.31.119:5432/alpha_arena}"
+SNAPSHOT_DATABASE_URL="${SNAPSHOT_DATABASE_URL:-postgresql://postgres:mysecretpassword@192.168.31.119:5432/alpha_snapshots}"
 
 LIVE_MIN_OBSERVATION_HOURS="${LIVE_MIN_OBSERVATION_HOURS:-24}"
 LIVE_MIN_TRADES="${LIVE_MIN_TRADES:-10}"
@@ -59,6 +64,51 @@ disable_localhost_proxy_if_needed() {
 
 disable_localhost_proxy_if_needed
 
+build_arg() {
+  if [[ "${NO_BUILD}" == "true" ]]; then
+    echo "--no-build"
+  else
+    echo "--build"
+  fi
+}
+
+validate_external_pg_config() {
+  if [[ "${USE_EXISTING_POSTGRES}" != "true" ]]; then
+    return 0
+  fi
+  if [[ -z "${DATABASE_URL}" ]]; then
+    echo "[error] DATABASE_URL is required when USE_EXISTING_POSTGRES=true" >&2
+    exit 1
+  fi
+  if [[ -z "${SNAPSHOT_DATABASE_URL}" ]]; then
+    echo "[error] SNAPSHOT_DATABASE_URL is required when USE_EXISTING_POSTGRES=true" >&2
+    exit 1
+  fi
+}
+
+validate_external_pg_config
+
+write_bootstrap_override() {
+  if [[ "${USE_EXISTING_POSTGRES}" == "true" ]]; then
+    cat > "${BOOTSTRAP_OVERRIDE_FILE}" <<EOF
+services:
+  app:
+    depends_on: []
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DATABASE_URL: "${DATABASE_URL}"
+      SNAPSHOT_DATABASE_URL: "${SNAPSHOT_DATABASE_URL}"
+EOF
+  else
+    cat > "${BOOTSTRAP_OVERRIDE_FILE}" <<EOF
+services:
+  app:
+    environment: {}
+EOF
+  fi
+}
+
 create_account() {
   local account_name="$1"
   local account_id
@@ -69,8 +119,16 @@ create_account() {
   echo "${account_id}"
 }
 
-echo "[step] docker compose up -d --build"
-docker compose up -d --build
+UP_ARG="$(build_arg)"
+write_bootstrap_override
+
+if [[ "${USE_EXISTING_POSTGRES}" == "true" ]]; then
+  echo "[step] starting app with existing postgres (${UP_ARG}, --no-deps app)"
+  docker compose -f docker-compose.yml -f "${BOOTSTRAP_OVERRIDE_FILE}" up -d "${UP_ARG}" --no-deps app
+else
+  echo "[step] docker compose up -d ${UP_ARG}"
+  docker compose -f docker-compose.yml -f "${BOOTSTRAP_OVERRIDE_FILE}" up -d "${UP_ARG}"
+fi
 
 echo "[step] waiting for API readiness"
 READY_DEADLINE=$(( $(date +%s) + 180 ))
@@ -95,7 +153,18 @@ echo "[step] writing ${OVERRIDE_FILE}"
 cat > "${OVERRIDE_FILE}" <<EOF
 services:
   app:
+$(if [[ "${USE_EXISTING_POSTGRES}" == "true" ]]; then cat <<EOI
+    depends_on: []
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+EOI
+fi)
     environment:
+$(if [[ "${USE_EXISTING_POSTGRES}" == "true" ]]; then cat <<EOI
+      DATABASE_URL: "${DATABASE_URL}"
+      SNAPSHOT_DATABASE_URL: "${SNAPSHOT_DATABASE_URL}"
+EOI
+fi)
       FACTOR_ENGINE_ENABLED: "true"
       FACTOR_RESEARCH_ENABLED: "true"
       FACTOR_RESEARCH_RUN_ON_STARTUP: "true"
@@ -117,7 +186,11 @@ services:
 EOF
 
 echo "[step] applying override config"
-docker compose -f docker-compose.yml -f "${OVERRIDE_FILE}" up -d --build
+if [[ "${USE_EXISTING_POSTGRES}" == "true" ]]; then
+  docker compose -f docker-compose.yml -f "${OVERRIDE_FILE}" up -d "${UP_ARG}" --no-deps app
+else
+  docker compose -f docker-compose.yml -f "${OVERRIDE_FILE}" up -d "${UP_ARG}"
+fi
 
 echo "[step] triggering one research run"
 TRIGGER_PAYLOAD="$(
