@@ -8,7 +8,7 @@ import json
 import logging
 import sys
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -90,7 +90,7 @@ class SignalBacktestService:
             import json
             try:
                 trigger_condition = json.loads(trigger_condition)
-                logger.warning(f"[Backtest] Parsed trigger_condition from JSON string")
+                logger.warning("[Backtest] Parsed trigger_condition from JSON string")
             except json.JSONDecodeError as e:
                 logger.warning(f"[Backtest] Failed to parse trigger_condition: {e}")
                 trigger_condition = {}
@@ -211,14 +211,14 @@ class SignalBacktestService:
 
         # Handle taker_volume composite signal
         if metric == "taker_volume":
-            logger.warning(f"[Backtest] Using taker_volume composite signal handler")
+            logger.warning("[Backtest] Using taker_volume composite signal handler")
             return self._find_taker_triggers_in_range(
                 db, signal_def, symbol, time_window, kline_min_ts, kline_max_ts, exchange
             )
 
         # Handle MACD event-based signal
         if metric == "macd":
-            logger.warning(f"[Backtest] Using MACD event-based signal handler")
+            logger.warning("[Backtest] Using MACD event-based signal handler")
             return self._find_macd_triggers_in_range(
                 db, signal_def, symbol, time_window, kline_min_ts, kline_max_ts, exchange
             )
@@ -232,7 +232,7 @@ class SignalBacktestService:
 
         # Handle oi USD change signal (special: calculates USD value change)
         if metric == "oi":
-            logger.warning(f"[Backtest] Using oi USD change signal handler")
+            logger.warning("[Backtest] Using oi USD change signal handler")
             return self._find_oi_change_triggers_in_range(
                 db, signal_def, symbol, time_window, kline_min_ts, kline_max_ts, exchange
             )
@@ -416,7 +416,7 @@ class SignalBacktestService:
         # Look up factor expression
         factor = db.query(CustomFactor).filter(
             CustomFactor.name == factor_name,
-            CustomFactor.is_active == True
+            CustomFactor.is_active
         ).first()
         if not factor:
             logger.warning(f"[Backtest] Factor not found: {factor_name}")
@@ -510,7 +510,7 @@ class SignalBacktestService:
             return ([], {})
 
         factor = db.query(CustomFactor).filter(
-            CustomFactor.name == factor_name, CustomFactor.is_active == True
+            CustomFactor.name == factor_name, CustomFactor.is_active
         ).first()
         if not factor:
             return ([], {})
@@ -646,15 +646,18 @@ class SignalBacktestService:
         Checks for golden cross, death cross, and other MACD events.
         """
         import pandas as pd
-        import pandas_ta as ta
+        try:
+            import pandas_ta as ta
+        except Exception as exc:
+            logger.warning(f"[Backtest] pandas_ta unavailable, skip MACD triggers: {exc}")
+            return []
         from database.models import CryptoKline
-        from sqlalchemy import desc
 
         condition = signal_def.get("trigger_condition", {})
         event_types = condition.get("event_types", [])
 
         if not event_types:
-            logger.warning(f"[Backtest] MACD signal has no event_types configured")
+            logger.warning("[Backtest] MACD signal has no event_types configured")
             return []
 
         interval_ms = TIMEFRAME_MS.get(time_window, 3600000)  # Default 1h for MACD
@@ -881,9 +884,6 @@ class SignalBacktestService:
 
         Returns a dict mapping bucket_timestamp -> indicator_value
         """
-        from services.market_flow_indicators import floor_timestamp
-        from database.models import MarketAssetMetrics, MarketTradesAggregated
-        from database.models import MarketOrderbookSnapshots
         from datetime import datetime
 
         # Query 7 days of data (same as signal_analysis_service)
@@ -2368,15 +2368,15 @@ class SignalBacktestService:
         for ts, high, low in data:
             bucket_ts = floor_timestamp(ts, interval_ms)
             h = float(high) if high else None
-            l = float(low) if low else None
-            if h and l:
+            low_value = float(low) if low else None
+            if h and low_value:
                 if bucket_ts not in buckets:
-                    buckets[bucket_ts] = {"high": h, "low": l}
+                    buckets[bucket_ts] = {"high": h, "low": low_value}
                 else:
                     if h > buckets[bucket_ts]["high"]:
                         buckets[bucket_ts]["high"] = h
-                    if l < buckets[bucket_ts]["low"]:
-                        buckets[bucket_ts]["low"] = l
+                    if low_value < buckets[bucket_ts]["low"]:
+                        buckets[bucket_ts]["low"] = low_value
 
         if not buckets:
             return None
@@ -2547,16 +2547,16 @@ class SignalBacktestService:
             # Data format: (timestamp, high_price, low_price)
             high, low = row[1], row[2]
             h = float(high) if high else None
-            l = float(low) if low else None
-            if h and l:
+            low_value = float(low) if low else None
+            if h and low_value:
                 if bucket_ts not in buckets:
-                    buckets[bucket_ts] = {"high": h, "low": l, "count": 0}
+                    buckets[bucket_ts] = {"high": h, "low": low_value, "count": 0}
                 else:
                     # Track max high and min low for the bucket
                     if h > buckets[bucket_ts]["high"]:
                         buckets[bucket_ts]["high"] = h
-                    if l < buckets[bucket_ts]["low"]:
-                        buckets[bucket_ts]["low"] = l
+                    if low_value < buckets[bucket_ts]["low"]:
+                        buckets[bucket_ts]["low"] = low_value
                 buckets[bucket_ts]["count"] += 1
 
     def _remove_from_bucket(self, buckets: Dict, bucket_ts: int, row: tuple, metric: str):
@@ -2593,7 +2593,6 @@ class SignalBacktestService:
 
     def _calc_from_buckets(self, buckets: Dict, metric: str) -> Optional[float]:
         """Calculate indicator value from current bucket state."""
-        import math
 
         # Filter to valid buckets only
         valid_buckets = {k: v for k, v in buckets.items() if v.get("count", 0) > 0}

@@ -3,6 +3,26 @@ from typing import Dict
 import os
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 class MarketConfig(BaseModel):
     market: str
     min_commission: float
@@ -56,3 +76,39 @@ BINANCE_DAILY_QUOTA_LIMIT = 40
 
 # Factor Engine toggle (set to "true" to enable factor computation)
 FACTOR_ENGINE_ENABLED = os.getenv("FACTOR_ENGINE_ENABLED", "false").lower() == "true"
+
+# Automated factor research loop
+FACTOR_RESEARCH_ENABLED = os.getenv("FACTOR_RESEARCH_ENABLED", "false").lower() == "true"
+FACTOR_RESEARCH_INTERVAL_SECONDS = _env_int("FACTOR_RESEARCH_INTERVAL_SECONDS", 6 * 3600)
+FACTOR_RESEARCH_EXCHANGE = os.getenv("FACTOR_RESEARCH_EXCHANGE", "hyperliquid")
+FACTOR_RESEARCH_TOP_N_SYMBOLS = _env_int("FACTOR_RESEARCH_TOP_N_SYMBOLS", 20)
+FACTOR_RESEARCH_LOOKBACK_DAYS = _env_int("FACTOR_RESEARCH_LOOKBACK_DAYS", 180)
+FACTOR_RESEARCH_OBJECTIVE = os.getenv("FACTOR_RESEARCH_OBJECTIVE", "return_over_drawdown")
+FACTOR_RESEARCH_FACTOR_SCOPE = os.getenv("FACTOR_RESEARCH_FACTOR_SCOPE", "builtin_only")
+FACTOR_RESEARCH_PERIOD = os.getenv("FACTOR_RESEARCH_PERIOD", "1h")
+FACTOR_RESEARCH_PRESCREEN_LIMIT = _env_int("FACTOR_RESEARCH_PRESCREEN_LIMIT", 10)
+FACTOR_RESEARCH_RUN_ON_STARTUP = (
+    os.getenv("FACTOR_RESEARCH_RUN_ON_STARTUP", "false").lower() == "true"
+)
+FACTOR_RESEARCH_AUTO_PROMOTE_PAPER = (
+    os.getenv("FACTOR_RESEARCH_AUTO_PROMOTE_PAPER", "false").lower() == "true"
+)
+FACTOR_RESEARCH_PAPER_ACCOUNT_ID = _env_int("FACTOR_RESEARCH_PAPER_ACCOUNT_ID", 0)
+FACTOR_RESEARCH_AUTO_PROMOTE_LIVE = (
+    os.getenv("FACTOR_RESEARCH_AUTO_PROMOTE_LIVE", "false").lower() == "true"
+)
+FACTOR_RESEARCH_LIVE_ACCOUNT_ID = _env_int("FACTOR_RESEARCH_LIVE_ACCOUNT_ID", 0)
+FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS = _env_float(
+    "FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS",
+    24.0,
+)
+FACTOR_RESEARCH_LIVE_MIN_TRADES = _env_int("FACTOR_RESEARCH_LIVE_MIN_TRADES", 10)
+FACTOR_RESEARCH_LIVE_MIN_NET_PNL = _env_float("FACTOR_RESEARCH_LIVE_MIN_NET_PNL", 0.0)
+FACTOR_RESEARCH_LIVE_MIN_WIN_RATE = _env_float("FACTOR_RESEARCH_LIVE_MIN_WIN_RATE", 50.0)
+FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT = _env_float(
+    "FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT",
+    20.0,
+)
+FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM = (
+    os.getenv("FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM", "true").lower() == "true"
+)

@@ -3,12 +3,6 @@
 import logging
 import threading
 
-from services.auto_trader import (
-    place_ai_driven_crypto_order,
-    place_random_crypto_order,
-    AUTO_TRADE_JOB_ID,
-    AI_TRADE_JOB_ID
-)
 from services.scheduler import start_scheduler, setup_market_tasks, task_scheduler
 from services.market_stream import start_market_stream, stop_market_stream
 from services.market_events import subscribe_price_updates, unsubscribe_price_updates
@@ -163,7 +157,29 @@ def initialize_services():
         logger.info(f"[Binance] WebSocket collector started with symbols: {binance_watchlist}")
 
         # Start Factor Computation Engine (if enabled)
-        from config.settings import FACTOR_ENGINE_ENABLED
+        from config.settings import (
+            FACTOR_ENGINE_ENABLED,
+            FACTOR_RESEARCH_ENABLED,
+            FACTOR_RESEARCH_EXCHANGE,
+            FACTOR_RESEARCH_FACTOR_SCOPE,
+            FACTOR_RESEARCH_INTERVAL_SECONDS,
+            FACTOR_RESEARCH_LOOKBACK_DAYS,
+            FACTOR_RESEARCH_OBJECTIVE,
+            FACTOR_RESEARCH_PERIOD,
+            FACTOR_RESEARCH_PRESCREEN_LIMIT,
+            FACTOR_RESEARCH_RUN_ON_STARTUP,
+            FACTOR_RESEARCH_TOP_N_SYMBOLS,
+            FACTOR_RESEARCH_AUTO_PROMOTE_PAPER,
+            FACTOR_RESEARCH_PAPER_ACCOUNT_ID,
+            FACTOR_RESEARCH_AUTO_PROMOTE_LIVE,
+            FACTOR_RESEARCH_LIVE_ACCOUNT_ID,
+            FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS,
+            FACTOR_RESEARCH_LIVE_MIN_TRADES,
+            FACTOR_RESEARCH_LIVE_MIN_NET_PNL,
+            FACTOR_RESEARCH_LIVE_MIN_WIN_RATE,
+            FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT,
+            FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM,
+        )
         if FACTOR_ENGINE_ENABLED:
             from services.factor_computation_service import factor_computation_service
             from services.factor_effectiveness_service import factor_effectiveness_service
@@ -172,6 +188,34 @@ def initialize_services():
             logger.info("[FactorEngine] Factor computation + effectiveness services started")
         else:
             print("[FactorEngine] Disabled (set FACTOR_ENGINE_ENABLED=true to enable)")
+
+        if FACTOR_RESEARCH_ENABLED:
+            from services.factor_research_service import factor_research_automation_service
+
+            factor_research_automation_service.start(
+                interval_seconds=FACTOR_RESEARCH_INTERVAL_SECONDS,
+                exchange=FACTOR_RESEARCH_EXCHANGE,
+                top_n_symbols=FACTOR_RESEARCH_TOP_N_SYMBOLS,
+                lookback_days=FACTOR_RESEARCH_LOOKBACK_DAYS,
+                objective=FACTOR_RESEARCH_OBJECTIVE,
+                factor_scope=FACTOR_RESEARCH_FACTOR_SCOPE,
+                period=FACTOR_RESEARCH_PERIOD,
+                prescreen_limit=FACTOR_RESEARCH_PRESCREEN_LIMIT,
+                run_immediately=FACTOR_RESEARCH_RUN_ON_STARTUP,
+                auto_promote_paper=FACTOR_RESEARCH_AUTO_PROMOTE_PAPER,
+                paper_account_id=FACTOR_RESEARCH_PAPER_ACCOUNT_ID,
+                auto_promote_live=FACTOR_RESEARCH_AUTO_PROMOTE_LIVE,
+                live_account_id=FACTOR_RESEARCH_LIVE_ACCOUNT_ID,
+                live_min_observation_hours=FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS,
+                live_min_trades=FACTOR_RESEARCH_LIVE_MIN_TRADES,
+                live_min_net_pnl=FACTOR_RESEARCH_LIVE_MIN_NET_PNL,
+                live_min_win_rate=FACTOR_RESEARCH_LIVE_MIN_WIN_RATE,
+                live_max_drawdown_percent=FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT,
+                require_live_confirm=FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM,
+            )
+            logger.info("[FactorResearch] Automated research loop started")
+        else:
+            print("[FactorResearch] Disabled (set FACTOR_RESEARCH_ENABLED=true to enable)")
 
         logger.info("All services initialized successfully")
 
@@ -186,12 +230,14 @@ def shutdown_services():
         from services.scheduler import stop_scheduler
         from services.hyperliquid_snapshot_service import hyperliquid_snapshot_service
         from services.kline_realtime_collector import realtime_collector
+        from services.factor_research_service import factor_research_automation_service
         import asyncio
 
         stop_strategy_manager()
         stop_market_stream()
         unsubscribe_price_updates(handle_price_update)
         hyperliquid_snapshot_service.stop()
+        factor_research_automation_service.stop()
 
         # Stop K-line realtime collector
         asyncio.create_task(realtime_collector.stop())

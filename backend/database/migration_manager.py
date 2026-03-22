@@ -74,6 +74,7 @@ MIGRATIONS = [
     "add_exchange_to_factor_effectiveness.py",
     "add_agent_wallet_fields.py",
     "create_custom_factors_table.py",
+    "create_factor_portfolio_tables.py",
     "insert_builtin_expression_factors.py",
 ]
 
@@ -116,7 +117,6 @@ def run_all_migrations() -> bool:
     logger.info("Running all migrations (idempotency-based)...")
 
     success_count = 0
-    skip_count = 0
     error_count = 0
 
     for migration in MIGRATIONS:

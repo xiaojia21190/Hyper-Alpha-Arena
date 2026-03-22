@@ -1,7 +1,6 @@
 from sqlalchemy import Column, Integer, BigInteger, String, DECIMAL, TIMESTAMP, ForeignKey, UniqueConstraint, Float, Date, DateTime, Text, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func, text
-import datetime
 
 from .connection import Base
 
@@ -1700,6 +1699,86 @@ class FactorEffectiveness(Base):
         UniqueConstraint('exchange', 'factor_name', 'symbol', 'period', 'forward_period', 'calc_date',
                          name='factor_effectiveness_unique_key'),
     )
+
+
+class FactorResearchRun(Base):
+    """Persisted factor research run summary for reproducibility."""
+    __tablename__ = "factor_research_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    exchange = Column(String(20), nullable=False, default="hyperliquid")
+    top_n_symbols = Column(Integer, nullable=False, default=20)
+    lookback_days = Column(Integer, nullable=False, default=180)
+    objective = Column(String(50), nullable=False, default="return_over_drawdown")
+    factor_scope = Column(String(50), nullable=False, default="builtin_only")
+    period = Column(String(10), nullable=False, default="1h")
+    prescreen_limit = Column(Integer, nullable=False, default=10)
+    status = Column(String(20), nullable=False, default="success")  # success | error
+    result_json = Column(Text, nullable=True)  # Full run result JSON
+    top_factor_json = Column(Text, nullable=True)  # Cached top factor JSON
+    top_portfolio_json = Column(Text, nullable=True)  # Cached top portfolio JSON
+    error_message = Column(Text, nullable=True)
+    started_at = Column(TIMESTAMP, nullable=True)
+    completed_at = Column(TIMESTAMP, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+    updated_at = Column(
+        TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp()
+    )
+
+    portfolios = relationship("FactorPortfolioCandidate", back_populates="run")
+
+
+class FactorPortfolioCandidate(Base):
+    """Persisted portfolio candidates generated from factor research."""
+    __tablename__ = "factor_portfolio_candidates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(Integer, ForeignKey("factor_research_runs.id"), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    construction_method = Column(String(80), nullable=False)
+    score = Column(Float, nullable=True)
+    component_count = Column(Integer, nullable=False, default=0)
+    components_json = Column(Text, nullable=False)  # JSON array of weighted components
+    metrics_json = Column(Text, nullable=True)  # JSON object with backtest/ranking metrics
+    is_recommended = Column(Boolean, nullable=False, default=False)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+
+    run = relationship("FactorResearchRun", back_populates="portfolios")
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "name", name="factor_portfolio_candidates_run_name_key"),
+    )
+
+
+class FactorPortfolioDeployment(Base):
+    """Deployment records for portfolio candidates to paper/live runtime."""
+    __tablename__ = "factor_portfolio_deployments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(Integer, ForeignKey("factor_research_runs.id"), nullable=True, index=True)
+    portfolio_id = Column(
+        Integer, ForeignKey("factor_portfolio_candidates.id"), nullable=False, index=True
+    )
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
+    mode = Column(String(20), nullable=False, default="paper")  # paper | live
+    status = Column(String(20), nullable=False, default="deployed")  # deployed | failed | pending
+    program_id = Column(Integer, ForeignKey("trading_programs.id"), nullable=True, index=True)
+    binding_id = Column(
+        Integer, ForeignKey("account_program_bindings.id"), nullable=True, index=True
+    )
+    deployment_config = Column(Text, nullable=True)  # JSON snapshot of request/config
+    deployment_result = Column(Text, nullable=True)  # JSON snapshot of execution result
+    error_message = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+    updated_at = Column(
+        TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp()
+    )
+
+    run = relationship("FactorResearchRun")
+    portfolio = relationship("FactorPortfolioCandidate")
+    account = relationship("Account")
+    program = relationship("TradingProgram")
+    binding = relationship("AccountProgramBinding")
 
 
 class CustomFactor(Base):

@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
+import builtins
+import sys
 import subprocess
 import threading
 import time
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,14 +13,28 @@ from sqlalchemy import text
 import os
 from dotenv import load_dotenv
 
-from decimal import Decimal
 
 # Load environment variables from .env file
 load_dotenv()
 
+for _stream in (sys.stdout, sys.stderr):
+    reconfigure = getattr(_stream, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(encoding="utf-8", errors="replace")
+
+
+def print(*args, **kwargs):
+    try:
+        return builtins.print(*args, **kwargs)
+    except UnicodeEncodeError:
+        fallback_args = [
+            str(arg).encode("ascii", errors="backslashreplace").decode("ascii")
+            for arg in args
+        ]
+        return builtins.print(*fallback_args, **kwargs)
+
 from database.connection import engine, Base, SessionLocal
-from database.models import TradingConfig, User, Account, SystemConfig, AccountAssetSnapshot
-from services.asset_curve_calculator import invalidate_asset_curve_cache
+from database.models import TradingConfig, User, SystemConfig
 from config.settings import DEFAULT_TRADING_CONFIGS
 from version import __version__
 
@@ -391,7 +405,7 @@ def on_startup():
             print(f"⚠ [Upgrade] Found {null_count} ai_decision_logs with NULL hyperliquid_environment, fixing...")
 
             # Update all NULL records to 'testnet' (safe default)
-            updated = db.execute(text("""
+            db.execute(text("""
                 UPDATE ai_decision_logs
                 SET hyperliquid_environment = 'testnet'
                 WHERE hyperliquid_environment IS NULL
@@ -511,7 +525,7 @@ async def restore_bot_webhooks():
                     adapter = get_telegram_adapter()
                     await adapter.start(token)
                     register_adapter(adapter)
-                    print(f"[startup] Telegram adapter registered")
+                    print("[startup] Telegram adapter registered")
         finally:
             db.close()
     except Exception as e:
@@ -548,7 +562,7 @@ async def restore_discord_gateway():
             adapter = get_discord_adapter()
             await adapter.start(token)
             register_adapter(adapter)
-            print(f"[startup] Discord adapter registered")
+            print("[startup] Discord adapter registered")
 
             async def handle_discord_message(user_id: int, username: str, display_name: str, text: str) -> str:
                 return await _process_discord_message_internal(user_id, username, display_name, text)
@@ -606,6 +620,8 @@ from api.ai_stream_routes import router as ai_stream_router
 from api.hyper_ai_routes import router as hyper_ai_router
 from api.bot_routes import router as bot_router
 from api.factor_routes import router as factor_router
+from api.factor_research_routes import router as factor_research_router
+from api.factor_portfolio_routes import router as factor_portfolio_router
 from routes.program_routes import router as program_router
 # Removed: AI account routes merged into account_routes (unified AI trader accounts)
 
@@ -637,12 +653,12 @@ app.include_router(ai_stream_router)
 app.include_router(hyper_ai_router)
 app.include_router(bot_router)
 app.include_router(factor_router)
+app.include_router(factor_research_router)
+app.include_router(factor_portfolio_router)
 # app.include_router(ai_account_router, prefix="/api")  # Removed - merged into account_router
 
 # Strategy route aliases for frontend compatibility
 from fastapi import HTTPException, Depends
-from sqlalchemy.orm import Session
-from database.connection import SessionLocal
 
 def get_db():
     db = SessionLocal()

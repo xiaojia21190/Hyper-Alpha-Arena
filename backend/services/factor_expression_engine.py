@@ -214,10 +214,10 @@ class FactorExpressionEngine:
                 return r.iloc[:, col]
             return s(close) * 0
 
-        funcs["STOCH_K"] = lambda h, l, c, period=14: _stoch_col(h, l, c, period, 0)
-        funcs["STOCH_D"] = lambda h, l, c, period=14: _stoch_col(h, l, c, period, 1)
-        funcs["CCI"] = lambda h, l, c, period=20: ta.cci(s(h), s(l), s(c), length=int(period))
-        funcs["WILLR"] = lambda h, l, c, period=14: ta.willr(s(h), s(l), s(c), length=int(period))
+        funcs["STOCH_K"] = lambda h, low, c, period=14: _stoch_col(h, low, c, period, 0)
+        funcs["STOCH_D"] = lambda h, low, c, period=14: _stoch_col(h, low, c, period, 1)
+        funcs["CCI"] = lambda h, low, c, period=20: ta.cci(s(h), s(low), s(c), length=int(period))
+        funcs["WILLR"] = lambda h, low, c, period=14: ta.willr(s(h), s(low), s(c), length=int(period))
         funcs["PPO"] = lambda series, fast=12, slow=26: ta.ppo(s(series), fast=int(fast), slow=int(slow)).iloc[:, 0]
         funcs["TRIX"] = lambda series, period=15: ta.trix(s(series), length=int(period)).iloc[:, 0]
 
@@ -228,9 +228,9 @@ class FactorExpressionEngine:
                 return r.iloc[:, col]
             return s(close) * 0
 
-        funcs["ADX"] = lambda h, l, c, period=14: _adx_col(h, l, c, period, 0)
-        funcs["PLUS_DI"] = lambda h, l, c, period=14: _adx_col(h, l, c, period, 1)
-        funcs["MINUS_DI"] = lambda h, l, c, period=14: _adx_col(h, l, c, period, 2)
+        funcs["ADX"] = lambda h, low, c, period=14: _adx_col(h, low, c, period, 0)
+        funcs["PLUS_DI"] = lambda h, low, c, period=14: _adx_col(h, low, c, period, 1)
+        funcs["MINUS_DI"] = lambda h, low, c, period=14: _adx_col(h, low, c, period, 2)
 
         def _aroon_col(high, low, period=25, col=0):
             r = ta.aroon(s(high), s(low), length=int(period))
@@ -238,13 +238,13 @@ class FactorExpressionEngine:
                 return r.iloc[:, col]
             return s(high) * 0
 
-        funcs["AROON_UP"] = lambda h, l, period=25: _aroon_col(h, l, period, 1)
-        funcs["AROON_DOWN"] = lambda h, l, period=25: _aroon_col(h, l, period, 0)
+        funcs["AROON_UP"] = lambda h, low, period=25: _aroon_col(h, low, period, 1)
+        funcs["AROON_DOWN"] = lambda h, low, period=25: _aroon_col(h, low, period, 0)
 
         # ── Volatility ──
-        funcs["ATR"] = lambda h, l, c, period=14: ta.atr(s(h), s(l), s(c), length=int(period))
-        funcs["NATR"] = lambda h, l, c, period=14: ta.natr(s(h), s(l), s(c), length=int(period))
-        funcs["TRUE_RANGE"] = lambda h, l, c: ta.true_range(s(h), s(l), s(c))
+        funcs["ATR"] = lambda h, low, c, period=14: ta.atr(s(h), s(low), s(c), length=int(period))
+        funcs["NATR"] = lambda h, low, c, period=14: ta.natr(s(h), s(low), s(c), length=int(period))
+        funcs["TRUE_RANGE"] = lambda h, low, c: ta.true_range(s(h), s(low), s(c))
         funcs["STDDEV"] = lambda series, period=20: s(series).rolling(window=int(period)).std()
 
         def _bb(series, period=20, col_idx=0):
@@ -259,10 +259,10 @@ class FactorExpressionEngine:
 
         # ── Volume ──
         funcs["OBV"] = lambda close, volume: ta.obv(s(close), s(volume))
-        funcs["VWAP"] = lambda h, l, c, v: ta.vwap(s(h), s(l), s(c), s(v))
-        funcs["AD"] = lambda h, l, c, v: ta.ad(s(h), s(l), s(c), s(v))
-        funcs["CMF"] = lambda h, l, c, v, period=20: ta.cmf(s(h), s(l), s(c), s(v), length=int(period))
-        funcs["MFI"] = lambda h, l, c, v, period=14: ta.mfi(s(h), s(l), s(c), s(v), length=int(period))
+        funcs["VWAP"] = lambda h, low, c, v: ta.vwap(s(h), s(low), s(c), s(v))
+        funcs["AD"] = lambda h, low, c, v: ta.ad(s(h), s(low), s(c), s(v))
+        funcs["CMF"] = lambda h, low, c, v, period=20: ta.cmf(s(h), s(low), s(c), s(v), length=int(period))
+        funcs["MFI"] = lambda h, low, c, v, period=14: ta.mfi(s(h), s(low), s(c), s(v), length=int(period))
 
         # ── Time Series Operators ──
         funcs["DELAY"] = lambda series, period=1: s(series).shift(int(period))
@@ -406,8 +406,11 @@ class FactorExpressionEngine:
         aeval.symtable["volume"] = df["volume"]
 
         # Inject TA functions
-        for name, func in self._build_functions(df).items():
-            aeval.symtable[name] = func
+        try:
+            for name, func in self._build_functions(df).items():
+                aeval.symtable[name] = func
+        except Exception as e:
+            return None, f"TA functions unavailable: {str(e)}"
 
         # Inject numpy for arithmetic
         aeval.symtable["np"] = np
