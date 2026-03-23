@@ -927,3 +927,52 @@ def test_factor_research_automation_service_trigger_run_updates_status_in_backgr
     assert final_status["last_result"]["symbols"] == ["BTC", "ETH"]
     assert final_status["progress"]["phase"] == "complete"
     assert db.closed is True
+
+
+def test_factor_research_automation_service_get_status_uses_compact_result_while_running():
+    assert hasattr(factor_research_service_module, "FactorResearchAutomationService")
+
+    class _DummyScheduler:
+        def remove_task(self, task_id):
+            return None
+
+        def add_interval_task(self, task_func, interval_seconds, task_id, *args, **kwargs):
+            return None
+
+    service = factor_research_service_module.FactorResearchAutomationService(
+        scheduler=_DummyScheduler(),
+        session_factory=lambda: object(),
+        research_service_factory=lambda _db: object(),
+    )
+
+    with service._lock:
+        service._status = "running"
+        service._last_result = {
+            "run_id": 1,
+            "exchange": "hyperliquid",
+            "symbols": ["BTC", "ETH"],
+            "top_n_symbols": 20,
+            "lookback_days": 180,
+            "objective": "return_over_drawdown",
+            "factor_scope": "builtin_only",
+            "candidate_count": 9,
+            "ranked_results": [
+                {"factor_name": f"F{i}", "score": float(i)}
+                for i in range(9)
+            ],
+            "portfolio_ranked_results": [
+                {"name": f"P{i}", "score": float(i), "weights": []}
+                for i in range(8)
+            ],
+            "top_factor": {"factor_name": "F0", "score": 9.0},
+            "top_portfolio": {"name": "P0", "portfolio_id": 100},
+        }
+
+    status = service.get_status()
+    compact_result = status["last_result"]
+
+    assert compact_result["partial"] is True
+    assert compact_result["candidate_count"] == 9
+    assert len(compact_result["ranked_results"]) == service.RESULT_PREVIEW_LIMIT
+    assert len(compact_result["portfolio_ranked_results"]) == service.RESULT_PREVIEW_LIMIT
+    assert compact_result["top_factor"]["factor_name"] == "F0"

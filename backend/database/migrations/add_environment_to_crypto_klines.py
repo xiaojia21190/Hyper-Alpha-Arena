@@ -37,11 +37,32 @@ def upgrade():
             db.execute(text("SET LOCAL statement_timeout = '120000ms'"))
 
         # Step 1: Add environment column with default value (idempotent)
-        print("Adding environment column to crypto_klines table...")
-        db.execute(text("""
-            ALTER TABLE crypto_klines
-            ADD COLUMN IF NOT EXISTS environment VARCHAR(20) NOT NULL DEFAULT 'mainnet'
-        """))
+        # Avoid taking an ALTER TABLE lock on every startup when the column already exists.
+        column_exists = False
+        if db.bind is not None and db.bind.dialect.name == "postgresql":
+            column_exists = bool(
+                db.execute(
+                    text(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM information_schema.columns
+                            WHERE table_name = 'crypto_klines'
+                              AND column_name = 'environment'
+                              AND table_schema = ANY(current_schemas(false))
+                        )
+                        """
+                    )
+                ).scalar()
+            )
+        if column_exists:
+            print("Environment column already exists, skipping ALTER TABLE")
+        else:
+            print("Adding environment column to crypto_klines table...")
+            db.execute(text("""
+                ALTER TABLE crypto_klines
+                ADD COLUMN IF NOT EXISTS environment VARCHAR(20) NOT NULL DEFAULT 'mainnet'
+            """))
 
         # Step 2: Update all existing records to 'mainnet'
         # (since current hardcoded sandbox=False means all data is mainnet)

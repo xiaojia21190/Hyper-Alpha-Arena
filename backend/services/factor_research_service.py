@@ -1295,6 +1295,7 @@ class FactorResearchService:
 
 class FactorResearchAutomationService:
     TASK_ID = "factor_research_automation"
+    RESULT_PREVIEW_LIMIT = 5
 
     def __init__(
         self,
@@ -1391,19 +1392,62 @@ class FactorResearchAutomationService:
         }
 
     def get_status(self) -> dict:
+        with self._lock:
+            return {
+                "enabled": self._running,
+                "status": self._status,
+                "interval_seconds": self._interval_seconds,
+                "config": dict(self._config),
+                "last_run_status": self._last_run_status,
+                "last_run_started_at": self._last_run_started_at,
+                "last_run_completed_at": self._last_run_completed_at,
+                "last_error": self._last_error,
+                "last_top_factor": self._last_top_factor,
+                "last_top_portfolio": self._last_top_portfolio,
+                "last_result": self._build_status_last_result_locked(),
+                "progress": dict(self._progress) if self._progress is not None else None,
+            }
+
+    def _build_status_last_result_locked(self) -> Optional[dict[str, Any]]:
+        if self._last_result is None:
+            return None
+        if self._status != "running":
+            return self._last_result
+        return self._build_compact_result_snapshot(self._last_result)
+
+    @classmethod
+    def _build_compact_result_snapshot(cls, result: dict[str, Any]) -> dict[str, Any]:
+        ranked_results = result.get("ranked_results")
+        portfolio_ranked_results = result.get("portfolio_ranked_results")
         return {
-            "enabled": self._running,
-            "status": self._status,
-            "interval_seconds": self._interval_seconds,
-            "config": dict(self._config),
-            "last_run_status": self._last_run_status,
-            "last_run_started_at": self._last_run_started_at,
-            "last_run_completed_at": self._last_run_completed_at,
-            "last_error": self._last_error,
-            "last_top_factor": self._last_top_factor,
-            "last_top_portfolio": self._last_top_portfolio,
-            "last_result": self._last_result,
-            "progress": dict(self._progress) if self._progress is not None else None,
+            "run_id": result.get("run_id"),
+            "exchange": result.get("exchange"),
+            "symbols": result.get("symbols", []),
+            "top_n_symbols": result.get("top_n_symbols"),
+            "lookback_days": result.get("lookback_days"),
+            "objective": result.get("objective"),
+            "factor_scope": result.get("factor_scope"),
+            "candidate_count": result.get("candidate_count", 0),
+            "fast_candidate_count": result.get("fast_candidate_count"),
+            "full_backtest_candidate_count": result.get(
+                "full_backtest_candidate_count"
+            ),
+            "fast_backtest_days": result.get("fast_backtest_days"),
+            "fast_backtest_symbol_count": result.get("fast_backtest_symbol_count"),
+            "top_factor": result.get("top_factor"),
+            "top_portfolio": result.get("top_portfolio"),
+            "auto_live_decision": result.get("auto_live_decision"),
+            "ranked_results": (
+                ranked_results[: cls.RESULT_PREVIEW_LIMIT]
+                if isinstance(ranked_results, list)
+                else []
+            ),
+            "portfolio_ranked_results": (
+                portfolio_ranked_results[: cls.RESULT_PREVIEW_LIMIT]
+                if isinstance(portfolio_ranked_results, list)
+                else []
+            ),
+            "partial": True,
         }
 
     def _run(self) -> None:

@@ -1124,6 +1124,7 @@ export interface FactorResearchResult {
   top_portfolio?: FactorPortfolioCandidate | null
   auto_paper_deployment?: FactorPortfolioDeploymentResult | null
   auto_live_decision?: FactorLiveDecision | null
+  partial?: boolean
 }
 
 export interface FactorResearchProgress {
