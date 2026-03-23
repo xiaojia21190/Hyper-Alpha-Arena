@@ -30,7 +30,9 @@ import SystemLogs from '@/components/layout/SystemLogs'
 import PromptManager from '@/components/prompt/PromptManager'
 import SignalManager from '@/components/signal/SignalManager'
 import AttributionAnalysis from '@/components/analytics/AttributionAnalysis'
-import FactorLibrary from '@/components/factor/FactorLibrary'
+import FactorResearchWorkspacePage from '@/components/factor/FactorResearchWorkspacePage'
+import FactorPortfolioDeploymentsPage from '@/components/factor/FactorPortfolioDeploymentsPage'
+import FactorLiveGateStatusPage from '@/components/factor/FactorLiveGateStatusPage'
 import TraderManagement from '@/components/trader/TraderManagement'
 import { HyperliquidPage } from '@/components/hyperliquid'
 import HyperliquidView from '@/components/hyperliquid/HyperliquidView'
@@ -88,7 +90,9 @@ const PAGE_TITLES: Record<string, string> = {
   'program-trader': 'Programs',
   'signal-management': 'Signal System',
   'attribution': 'Attribution Analysis',
-  'factor-library': 'Factor Library',
+  'factor-research-workspace': 'Factor Research Workspace',
+  'factor-portfolio-deployments': 'Portfolio Deployments',
+  'factor-live-gate': 'Live Gate Status',
   'trader-management': 'AI Trader Management',
   'hyperliquid': 'Manual Trading',
   'klines': 'K-Line Charts',
@@ -97,6 +101,12 @@ const PAGE_TITLES: Record<string, string> = {
   'settings': 'Settings',
   'arena-assets': 'Arena Assets',
 }
+
+const PAGE_ALIASES: Record<string, string> = {
+  'factor-library': 'factor-research-workspace',
+}
+
+const normalizePage = (page: string): string => PAGE_ALIASES[page] || page
 
 function App() {
   const { tradingMode } = useTradingMode()
@@ -110,7 +120,7 @@ function App() {
   const [aiDecisions, setAiDecisions] = useState<AIDecision[]>([])
   const [allAssetCurves, setAllAssetCurves] = useState<any[]>([])
   const [hyperliquidRefreshKey, setHyperliquidRefreshKey] = useState(0)
-  const [currentPage, setCurrentPage] = useState<string>('hyper-ai')
+  const [currentPage, setCurrentPage] = useState<string>('factor-research-workspace')
   const tradingModeRef = useRef(tradingMode)
 
   /**
@@ -124,8 +134,9 @@ function App() {
    * IMPORTANT: All page navigation should use this function, not setCurrentPage directly.
    */
   const handlePageChange = useCallback((page: string) => {
-    setCurrentPage(page)
-    window.location.hash = page
+    const normalizedPage = normalizePage(page)
+    setCurrentPage(normalizedPage)
+    window.location.hash = normalizedPage
   }, [])
 
   // Hyper AI states - initialization happens during splash
@@ -284,8 +295,12 @@ function App() {
     if (hash) {
       const hashParamIndex = hash.indexOf('?')
       const pageName = hashParamIndex !== -1 ? hash.slice(0, hashParamIndex) : hash
-      if (PAGE_TITLES[pageName]) {
-        setCurrentPage(pageName)
+      const normalizedPage = normalizePage(pageName)
+      if (PAGE_TITLES[normalizedPage]) {
+        setCurrentPage(normalizedPage)
+        if (normalizedPage !== pageName) {
+          window.location.hash = normalizedPage
+        }
       }
     }
   }, [])
@@ -297,7 +312,8 @@ function App() {
       if (hash) {
         const paramIdx = hash.indexOf('?')
         const pageName = paramIdx !== -1 ? hash.slice(0, paramIdx) : hash
-        if (PAGE_TITLES[pageName]) setCurrentPage(pageName)
+        const normalizedPage = normalizePage(pageName)
+        if (PAGE_TITLES[normalizedPage]) setCurrentPage(normalizedPage)
       }
     }
     window.addEventListener('hashchange', onHashChange)
@@ -821,8 +837,16 @@ function App() {
           <AttributionAnalysis />
         )}
 
-        {currentPage === 'factor-library' && (
-          <FactorLibrary />
+        {currentPage === 'factor-research-workspace' && (
+          <FactorResearchWorkspacePage />
+        )}
+
+        {currentPage === 'factor-portfolio-deployments' && (
+          <FactorPortfolioDeploymentsPage />
+        )}
+
+        {currentPage === 'factor-live-gate' && (
+          <FactorLiveGateStatusPage />
         )}
 
         {currentPage === 'trader-management' && (

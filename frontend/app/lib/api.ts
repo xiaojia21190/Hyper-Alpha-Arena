@@ -1111,6 +1111,40 @@ export interface FactorResearchRankedResult {
   symbols_with_effectiveness?: number
 }
 
+export interface FactorLiveGateCheck {
+  actual: number
+  threshold: number
+  passed: boolean
+}
+
+export interface FactorLiveDecision {
+  decision: string
+  reason?: string | null
+  error?: string | null
+  gate?: {
+    passed: boolean
+    failed_checks: string[]
+    checks: Record<string, FactorLiveGateCheck>
+  } | null
+  paper_context?: {
+    paper_account_id: number
+    portfolio_id: number
+    paper_deployment?: FactorPortfolioDeploymentRecord | null
+    metrics?: {
+      observation_hours?: number
+      trade_count?: number
+      winning_trades?: number
+      net_pnl?: number
+      win_rate_percent?: number
+      max_drawdown_percent?: number
+    } | null
+  } | null
+  live_deployment?: FactorPortfolioDeploymentResult | {
+    deployment?: FactorPortfolioDeploymentRecord
+    already_exists?: boolean
+  } | null
+}
+
 export interface FactorResearchResult {
   run_id?: number | null
   exchange: string
@@ -1131,6 +1165,7 @@ export interface FactorResearchResult {
   portfolio_ranked_results?: FactorPortfolioCandidate[]
   top_portfolio?: FactorPortfolioCandidate | null
   auto_paper_deployment?: FactorPortfolioDeploymentResult | null
+  auto_live_decision?: FactorLiveDecision | null
 }
 
 export interface FactorResearchProgress {
@@ -1219,6 +1254,22 @@ export interface FactorPortfolioDeploymentResult {
   portfolio: FactorPortfolioCandidate
 }
 
+export interface FactorPortfolioDeploymentRecord {
+  id: number
+  run_id?: number | null
+  portfolio_id: number
+  account_id: number
+  mode: 'paper' | 'live' | string
+  status: string
+  program_id?: number | null
+  binding_id?: number | null
+  deployment_config?: Record<string, unknown> | null
+  deployment_result?: Record<string, unknown> | null
+  error_message?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
 export interface FactorPortfolioLatestResponse {
   run: Record<string, unknown>
   portfolio_candidates: FactorPortfolioCandidate[]
@@ -1242,6 +1293,19 @@ export async function triggerFactorResearchRun(
 
 export async function getLatestFactorPortfolioRun(): Promise<FactorPortfolioLatestResponse> {
   const response = await apiRequest('/factor-portfolios/latest')
+  return response.json()
+}
+
+export async function getFactorPortfolioDeployments(
+  params?: { account_id?: number; limit?: number }
+): Promise<{ items: FactorPortfolioDeploymentRecord[] }> {
+  const query = new URLSearchParams()
+  if (params?.account_id != null) query.set('account_id', String(params.account_id))
+  if (params?.limit != null) query.set('limit', String(params.limit))
+  const url = query.toString()
+    ? `/factor-portfolios/deployments?${query.toString()}`
+    : '/factor-portfolios/deployments'
+  const response = await apiRequest(url)
   return response.json()
 }
 

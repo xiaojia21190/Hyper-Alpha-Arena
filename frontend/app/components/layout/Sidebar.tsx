@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BarChart3, FileText, NotebookPen, Coins, MessageSquare, Mail, Bot, Ghost, ScrollText, Settings, FlaskConical, Github, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { BarChart3, FileText, NotebookPen, Coins, MessageSquare, Mail, Bot, Ghost, ScrollText, Settings, FlaskConical, Github, ShieldCheck, AlertTriangle, Rocket } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ContactDialog from '@/components/contact/ContactDialog'
 import ExchangeModal from '@/components/exchange/ExchangeModal'
@@ -133,19 +133,33 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
     setConfirmTarget(null)
   }
 
-  const desktopNav = [
-    { label: t('hyperAi.title', 'Hyper AI'), page: 'hyper-ai', icon: Bot },
-    { label: t('sidebar.dashboard'), page: 'comprehensive', icon: BarChart3 },
+  const newFlowNav = [
+    { label: t('sidebar.factorResearchCenter', '因子研究中心'), page: 'factor-research-workspace', icon: FlaskConical },
+    { label: t('sidebar.portfolioDeployments', '组合部署记录'), page: 'factor-portfolio-deployments', icon: Rocket },
+    { label: t('sidebar.liveGateStatus', '实盘门控状态'), page: 'factor-live-gate', icon: ShieldAlert },
+  ] as const
+
+  const oldFlowNav = [
     { label: t('sidebar.aiTrader', 'AI Trader'), page: 'trader-management', icon: Ghost },
     { label: t('sidebar.prompts', 'Prompts'), page: 'prompt-management', icon: NotebookPen },
-    { label: t('sidebar.programTrader', 'Program Trader'), page: 'program-trader', icon: ScrollText },
     { label: t('sidebar.signals', 'Signals'), page: 'signal-management', icon: SignalIcon },
+  ] as const
+
+  const commonNav = [
+    { label: t('hyperAi.title', 'Hyper AI'), page: 'hyper-ai', icon: Bot },
+    { label: t('sidebar.dashboard'), page: 'comprehensive', icon: BarChart3 },
+    { label: t('sidebar.programTrader', 'Program Trader'), page: 'program-trader', icon: ScrollText },
     { label: t('sidebar.attribution', 'Attribution'), page: 'attribution', icon: AttributionIcon },
-    { label: t('sidebar.factorLibrary', 'Factors'), page: 'factor-library', icon: FlaskConical },
     { label: t('sidebar.manualTrading', 'Manual Trading'), page: 'hyperliquid', icon: Coins },
     { label: t('sidebar.klines', 'K-Lines'), page: 'klines', icon: KLinesIcon },
     { label: t('sidebar.premium', 'Premium'), page: 'premium-features', icon: PremiumIcon },
     { label: t('sidebar.systemLogs', 'System Logs'), page: 'system-logs', icon: FileText },
+  ] as const
+
+  const navSections = [
+    { key: 'new-flow', title: t('sidebar.newFlow', '新流程'), items: newFlowNav },
+    { key: 'old-flow', title: t('sidebar.oldFlow', '旧流程'), items: oldFlowNav },
+    { key: 'common', title: t('sidebar.common', '通用'), items: commonNav },
   ] as const
 
   const isTestnet = tradingMode === 'testnet'
@@ -232,24 +246,31 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
 
         {/* Middle: Navigation (scrollable) */}
         <nav className="flex-1 overflow-y-auto px-4 py-3">
-          <div className="flex flex-col space-y-1.5">
-            {desktopNav.map((item) => {
-              const Icon = item.icon
-              const isActive = currentPage === item.page
-              return (
-                <button
-                  key={item.page}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    isActive ? 'bg-secondary/80 text-[#B8860B]' : 'hover:text-[#B8860B] text-muted-foreground'
-                  }`}
-                  onClick={() => onPageChange?.(item.page)}
-                  title={item.label}
-                >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  <span>{item.label}</span>
-                </button>
-              )
-            })}
+          <div className="flex flex-col space-y-4">
+            {navSections.map((section) => (
+              <div key={section.key} className="space-y-1.5">
+                <div className="px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+                  {section.title}
+                </div>
+                {section.items.map((item) => {
+                  const Icon = item.icon
+                  const isActive = currentPage === item.page
+                  return (
+                    <button
+                      key={item.page}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive ? 'bg-secondary/80 text-[#B8860B]' : 'hover:text-[#B8860B] text-muted-foreground'
+                      }`}
+                      onClick={() => onPageChange?.(item.page)}
+                      title={item.label}
+                    >
+                      <Icon className="w-5 h-5 flex-shrink-0" />
+                      <span>{item.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
           </div>
         </nav>
 
@@ -332,31 +353,43 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
         </div>
       </aside>
 
-      {/* Mobile Navigation - 4 tabs: Dashboard, K-Lines, Chat, Programs */}
+      {/* Mobile Navigation - 4 tabs: Research, Deployments, Live Gate, Chat */}
       <nav className="md:hidden flex flex-row items-center justify-around fixed bottom-0 left-0 right-0 bg-background border-t h-16 px-2 z-50">
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
-            currentPage === 'comprehensive'
+            currentPage === 'factor-research-workspace'
               ? 'bg-secondary/80 text-secondary-foreground'
               : 'hover:bg-muted text-muted-foreground'
           }`}
-          onClick={() => onPageChange?.('comprehensive')}
-          title="Dashboard"
+          onClick={() => onPageChange?.('factor-research-workspace')}
+          title="Research"
         >
-          <BarChart3 className="w-5 h-5" />
-          <span className="text-xs mt-1">Dashboard</span>
+          <FlaskConical className="w-5 h-5" />
+          <span className="text-xs mt-1">Research</span>
         </button>
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
-            currentPage === 'klines'
+            currentPage === 'factor-portfolio-deployments'
               ? 'bg-secondary/80 text-secondary-foreground'
               : 'hover:bg-muted text-muted-foreground'
           }`}
-          onClick={() => onPageChange?.('klines')}
-          title="K-Lines"
+          onClick={() => onPageChange?.('factor-portfolio-deployments')}
+          title="Deployments"
         >
-          <KLinesIcon className="w-5 h-5" />
-          <span className="text-xs mt-1">K-Lines</span>
+          <Rocket className="w-5 h-5" />
+          <span className="text-xs mt-1">Deploy</span>
+        </button>
+        <button
+          className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
+            currentPage === 'factor-live-gate'
+              ? 'bg-secondary/80 text-secondary-foreground'
+              : 'hover:bg-muted text-muted-foreground'
+          }`}
+          onClick={() => onPageChange?.('factor-live-gate')}
+          title="Live Gate"
+        >
+          <ShieldAlert className="w-5 h-5" />
+          <span className="text-xs mt-1">Gate</span>
         </button>
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
@@ -369,18 +402,6 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
         >
           <MessageSquare className="w-5 h-5" />
           <span className="text-xs mt-1">Chat</span>
-        </button>
-        <button
-          className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
-            currentPage === 'program-trader'
-              ? 'bg-secondary/80 text-secondary-foreground'
-              : 'hover:bg-muted text-muted-foreground'
-          }`}
-          onClick={() => onPageChange?.('program-trader')}
-          title="Programs"
-        >
-          <MobileProgramsIcon className="w-5 h-5" />
-          <span className="text-xs mt-1">Programs</span>
         </button>
       </nav>
 
