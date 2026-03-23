@@ -542,6 +542,41 @@ def get_latest_portfolio_run(db) -> dict[str, Any] | None:
     }
 
 
+def get_latest_live_gate_status(db) -> dict[str, Any] | None:
+    latest_run = (
+        db.query(FactorResearchRun)
+        .filter(FactorResearchRun.status == "success")
+        .order_by(FactorResearchRun.created_at.desc(), FactorResearchRun.id.desc())
+        .first()
+    )
+    if latest_run is None:
+        return None
+
+    candidate_runs = (
+        db.query(FactorResearchRun)
+        .filter(FactorResearchRun.status == "success")
+        .order_by(FactorResearchRun.created_at.desc(), FactorResearchRun.id.desc())
+        .limit(100)
+        .all()
+    )
+
+    decision_run: FactorResearchRun | None = None
+    live_decision: dict[str, Any] | None = None
+    for run in candidate_runs:
+        parsed_result = _parse_json(run.result_json, {})
+        decision = parsed_result.get("auto_live_decision")
+        if isinstance(decision, dict):
+            decision_run = run
+            live_decision = decision
+            break
+
+    return {
+        "latest_run": _serialize_run(latest_run),
+        "decision_run": _serialize_run(decision_run),
+        "live_decision": live_decision,
+    }
+
+
 def get_portfolio_run_detail(db, run_id: int) -> dict[str, Any] | None:
     run = db.query(FactorResearchRun).filter(FactorResearchRun.id == run_id).first()
     if not run:

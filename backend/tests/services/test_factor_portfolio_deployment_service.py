@@ -1,7 +1,11 @@
 from datetime import datetime, timezone
+import json
 
-from database.models import Account, FactorPortfolioCandidate, User
-from services.factor_portfolio_deployment_service import FactorPortfolioDeploymentService
+from database.models import Account, FactorPortfolioCandidate, FactorResearchRun, User
+from services.factor_portfolio_deployment_service import (
+    FactorPortfolioDeploymentService,
+    get_latest_live_gate_status,
+)
 
 
 class _FakeQuery:
@@ -285,3 +289,82 @@ def test_auto_decide_live_promotion_skips_when_existing_live_found(monkeypatch):
     assert result["decision"] == "skipped"
     assert result["reason"] == "already_live_for_target_account"
     assert result["live_deployment"]["already_exists"] is True
+
+
+class _LiveGateQuery:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def order_by(self, *args, **kwargs):
+        return self
+
+    def limit(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return self.rows[0] if self.rows else None
+
+    def all(self):
+        return list(self.rows)
+
+
+class _LiveGateDb:
+    def __init__(self, runs):
+        self.runs = runs
+
+    def query(self, model):
+        assert model is FactorResearchRun
+        return _LiveGateQuery(self.runs)
+
+
+def test_get_latest_live_gate_status_prefers_newest_decision_run():
+    latest_run = FactorResearchRun(
+        id=3,
+        exchange="hyperliquid",
+        top_n_symbols=20,
+        lookback_days=180,
+        objective="return_over_drawdown",
+        factor_scope="builtin_only",
+        period="1h",
+        prescreen_limit=10,
+        status="success",
+        result_json=json.dumps({"top_factor": {"factor_name": "RSI14"}}),
+        top_factor_json="{}",
+        top_portfolio_json="{}",
+        created_at=datetime(2026, 3, 24, tzinfo=timezone.utc),
+    )
+    decision_run = FactorResearchRun(
+        id=2,
+        exchange="hyperliquid",
+        top_n_symbols=20,
+        lookback_days=180,
+        objective="return_over_drawdown",
+        factor_scope="builtin_only",
+        period="1h",
+        prescreen_limit=10,
+        status="success",
+        result_json=json.dumps({
+            "auto_live_decision": {
+                "decision": "not_ready",
+                "reason": "gate_not_passed",
+            }
+        }),
+        top_factor_json="{}",
+        top_portfolio_json="{}",
+        created_at=datetime(2026, 3, 23, tzinfo=timezone.utc),
+    )
+
+    payload = get_latest_live_gate_status(_LiveGateDb([latest_run, decision_run]))
+
+    assert payload is not None
+    assert payload["latest_run"]["id"] == 3
+    assert payload["decision_run"]["id"] == 2
+    assert payload["live_decision"]["decision"] == "not_ready"
+
+
+def test_get_latest_live_gate_status_returns_none_without_runs():
+    payload = get_latest_live_gate_status(_LiveGateDb([]))
+    assert payload is None

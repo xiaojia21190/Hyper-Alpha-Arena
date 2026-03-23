@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   type FactorLiveDecision,
+  type FactorLiveGateSnapshot,
   type FactorPortfolioCandidate,
   type FactorPortfolioDeploymentRecord,
   type FactorResearchProgress,
@@ -17,6 +18,7 @@ import {
   getAccounts,
   getFactorPortfolioDeployments,
   getFactorResearchStatus,
+  getLatestLiveGateStatus,
   getLatestFactorPortfolioRun,
   triggerFactorResearchRun,
 } from '@/lib/api'
@@ -135,6 +137,7 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
 
   const [availableAccounts, setAvailableAccounts] = useState<Array<{ id: number; name: string }>>([])
   const [deployAccountId, setDeployAccountId] = useState<number>(0)
+  const [liveGateSnapshot, setLiveGateSnapshot] = useState<FactorLiveGateSnapshot | null>(null)
 
   const loadResearchStatus = useCallback(async (showLoader = false) => {
     if (showLoader) setResearchStatusLoading(true)
@@ -158,6 +161,15 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
       setPortfolioSnapshot(null)
     } finally {
       setPortfolioLoading(false)
+    }
+  }, [])
+
+  const loadLiveGateSnapshot = useCallback(async () => {
+    try {
+      const payload = await getLatestLiveGateStatus()
+      setLiveGateSnapshot(payload)
+    } catch {
+      setLiveGateSnapshot(null)
     }
   }, [])
 
@@ -195,9 +207,10 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
   useEffect(() => {
     loadResearchStatus(true)
     loadPortfolioSnapshot()
+    loadLiveGateSnapshot()
     loadDeployments()
     loadDeployAccounts()
-  }, [loadResearchStatus, loadPortfolioSnapshot, loadDeployments, loadDeployAccounts])
+  }, [loadResearchStatus, loadPortfolioSnapshot, loadLiveGateSnapshot, loadDeployments, loadDeployAccounts])
 
   useEffect(() => {
     const intervalMs = researchStatus?.status === 'running'
@@ -216,6 +229,14 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
     }, DEPLOYMENT_POLL_INTERVAL_MS)
     return () => window.clearInterval(timer)
   }, [view, loadDeployments])
+
+  useEffect(() => {
+    if (view !== 'live-gate') return
+    const timer = window.setInterval(() => {
+      loadLiveGateSnapshot()
+    }, RESEARCH_POLL_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [view, loadLiveGateSnapshot])
 
   const researchState = researchStatus?.status === 'running'
     ? 'running'
@@ -248,7 +269,10 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
     ? Math.max(0, Math.min(100, Math.round(((researchProgress.current || 0) / researchProgress.total) * 100)))
     : null
 
-  const liveDecision = (researchStatus?.last_result as any)?.auto_live_decision as FactorLiveDecision | null | undefined
+  const inMemoryLiveDecision = (researchStatus?.last_result as any)?.auto_live_decision as FactorLiveDecision | null | undefined
+  const liveDecision = inMemoryLiveDecision || liveGateSnapshot?.live_decision || null
+  const latestRunMeta = (liveGateSnapshot?.latest_run || null) as Record<string, any> | null
+  const decisionRunMeta = (liveGateSnapshot?.decision_run || null) as Record<string, any> | null
 
   const liveChecks = useMemo(() => {
     const checks = liveDecision?.gate?.checks || {}
@@ -274,12 +298,13 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
         setStatusError(isZh ? '研究任务已在运行' : 'Research run is already running')
       }
       await loadResearchStatus(true)
+      await loadLiveGateSnapshot()
     } catch (e: any) {
       setStatusError(e?.message || (isZh ? '启动研究失败' : 'Failed to start research'))
     } finally {
       setResearchStarting(false)
     }
-  }, [isZh, loadResearchStatus, researchStatus?.config])
+  }, [isZh, loadLiveGateSnapshot, loadResearchStatus, researchStatus?.config])
 
   const handleDeployPortfolioPaper = useCallback(async () => {
     if (!topPortfolioId) return
@@ -303,13 +328,13 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
           ? `纸面部署成功：Program #${payload.program.id}，Binding #${payload.binding.id}`
           : `Paper deployment succeeded: Program #${payload.program.id}, Binding #${payload.binding.id}`
       )
-      await Promise.all([loadResearchStatus(), loadPortfolioSnapshot(), loadDeployments()])
+      await Promise.all([loadResearchStatus(), loadPortfolioSnapshot(), loadLiveGateSnapshot(), loadDeployments()])
     } catch (e: any) {
       setPortfolioActionError(e?.message || (isZh ? '纸面部署失败' : 'Paper deployment failed'))
     } finally {
       setPortfolioActionLoading(null)
     }
-  }, [deployAccountId, isZh, loadDeployments, loadPortfolioSnapshot, loadResearchStatus, topPortfolioId])
+  }, [deployAccountId, isZh, loadDeployments, loadLiveGateSnapshot, loadPortfolioSnapshot, loadResearchStatus, topPortfolioId])
 
   const handleDeployPortfolioLive = useCallback(async () => {
     if (!topPortfolioId) return
@@ -341,13 +366,13 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
           ? `实盘部署成功：Program #${payload.program.id}，Binding #${payload.binding.id}`
           : `Live deployment succeeded: Program #${payload.program.id}, Binding #${payload.binding.id}`
       )
-      await Promise.all([loadResearchStatus(), loadPortfolioSnapshot(), loadDeployments()])
+      await Promise.all([loadResearchStatus(), loadPortfolioSnapshot(), loadLiveGateSnapshot(), loadDeployments()])
     } catch (e: any) {
       setPortfolioActionError(e?.message || (isZh ? '实盘部署失败' : 'Live deployment failed'))
     } finally {
       setPortfolioActionLoading(null)
     }
-  }, [deployAccountId, isZh, loadDeployments, loadPortfolioSnapshot, loadResearchStatus, topPortfolioId])
+  }, [deployAccountId, isZh, loadDeployments, loadLiveGateSnapshot, loadPortfolioSnapshot, loadResearchStatus, topPortfolioId])
 
   return (
     <div className="flex flex-col flex-1 min-h-0 space-y-4">
@@ -372,6 +397,7 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
               onClick={() => {
                 loadResearchStatus(true)
                 loadPortfolioSnapshot()
+                loadLiveGateSnapshot()
                 loadDeployments()
               }}
             >
@@ -658,6 +684,23 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
 
       {view === 'live-gate' && (
         <>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border bg-background/70 p-3">
+              <div className="text-xs text-muted-foreground">{isZh ? '最近成功运行' : 'Latest successful run'}</div>
+              <div className="mt-1 text-sm font-medium font-mono">#{latestRunMeta?.id ?? '--'}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {formatIso((latestRunMeta?.completed_at as string) || (latestRunMeta?.created_at as string))}
+              </div>
+            </div>
+            <div className="rounded-lg border bg-background/70 p-3">
+              <div className="text-xs text-muted-foreground">{isZh ? '门控决策来源运行' : 'Decision source run'}</div>
+              <div className="mt-1 text-sm font-medium font-mono">#{decisionRunMeta?.id ?? '--'}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {formatIso((decisionRunMeta?.completed_at as string) || (decisionRunMeta?.created_at as string))}
+              </div>
+            </div>
+          </div>
+
           {!liveDecision ? (
             <div className="rounded-lg border border-dashed bg-background/60 px-4 py-3 text-sm text-muted-foreground">
               {isZh

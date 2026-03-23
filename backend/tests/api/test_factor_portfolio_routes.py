@@ -28,6 +28,51 @@ def test_latest_factor_portfolio_run(monkeypatch):
     assert response.json()["top_portfolio"]["id"] == 101
 
 
+def test_latest_live_gate_status(monkeypatch):
+    app = FastAPI()
+    app.include_router(factor_portfolio_routes_module.router)
+    app.dependency_overrides[factor_portfolio_routes_module.get_db] = lambda: object()
+
+    monkeypatch.setattr(
+        factor_portfolio_routes_module,
+        "get_latest_live_gate_status",
+        lambda db: {
+            "latest_run": {"id": 11, "status": "success"},
+            "decision_run": {"id": 10, "status": "success"},
+            "live_decision": {"decision": "not_ready"},
+        },
+        raising=False,
+    )
+
+    client = TestClient(app)
+    response = client.get("/api/factor-portfolios/live-gate/latest")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["latest_run"]["id"] == 11
+    assert body["decision_run"]["id"] == 10
+    assert body["live_decision"]["decision"] == "not_ready"
+
+
+def test_latest_live_gate_status_404_when_missing(monkeypatch):
+    app = FastAPI()
+    app.include_router(factor_portfolio_routes_module.router)
+    app.dependency_overrides[factor_portfolio_routes_module.get_db] = lambda: object()
+
+    monkeypatch.setattr(
+        factor_portfolio_routes_module,
+        "get_latest_live_gate_status",
+        lambda db: None,
+        raising=False,
+    )
+
+    client = TestClient(app)
+    response = client.get("/api/factor-portfolios/live-gate/latest")
+
+    assert response.status_code == 404
+    assert "No successful factor research run found" in response.json()["detail"]
+
+
 def test_deploy_live_requires_confirm(monkeypatch):
     app = FastAPI()
     app.include_router(factor_portfolio_routes_module.router)

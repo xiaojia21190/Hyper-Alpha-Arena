@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from database.connection import get_db
 from services.factor_portfolio_deployment_service import (
     deploy_portfolio_candidate,
+    get_latest_live_gate_status,
     get_latest_portfolio_run,
     get_portfolio_run_detail,
     list_portfolio_deployments,
@@ -29,6 +30,14 @@ async def latest_factor_portfolio_run(db: Session = Depends(get_db)):
     payload = get_latest_portfolio_run(db)
     if payload is None:
         raise HTTPException(status_code=404, detail="No successful factor portfolio run found")
+    return payload
+
+
+@router.get("/live-gate/latest")
+async def latest_live_gate_status(db: Session = Depends(get_db)):
+    payload = get_latest_live_gate_status(db)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="No successful factor research run found")
     return payload
 
 
@@ -99,4 +108,3 @@ async def deploy_portfolio_live(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-

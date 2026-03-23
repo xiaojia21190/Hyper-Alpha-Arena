@@ -1276,6 +1276,12 @@ export interface FactorPortfolioLatestResponse {
   top_portfolio: FactorPortfolioCandidate | null
 }
 
+export interface FactorLiveGateSnapshot {
+  latest_run: Record<string, unknown> | null
+  decision_run: Record<string, unknown> | null
+  live_decision: FactorLiveDecision | null
+}
+
 export async function getFactorResearchStatus(): Promise<FactorResearchStatus> {
   const response = await apiRequest('/factor-research/status')
   return response.json()
@@ -1293,6 +1299,11 @@ export async function triggerFactorResearchRun(
 
 export async function getLatestFactorPortfolioRun(): Promise<FactorPortfolioLatestResponse> {
   const response = await apiRequest('/factor-portfolios/latest')
+  return response.json()
+}
+
+export async function getLatestLiveGateStatus(): Promise<FactorLiveGateSnapshot> {
+  const response = await apiRequest('/factor-portfolios/live-gate/latest')
   return response.json()
 }
 
