@@ -7,11 +7,12 @@
 import pandas as pd
 from typing import List, Dict, Any, Optional
 import logging
+from services.pandas_ta_compat import load_pandas_ta
 
 logger = logging.getLogger(__name__)
 
 try:
-    import pandas_ta as ta  # type: ignore
+    ta = load_pandas_ta()  # type: ignore
     PANDAS_TA_AVAILABLE = True
     PANDAS_TA_IMPORT_ERROR: Optional[Exception] = None
 except Exception as exc:  # pragma: no cover - env-specific compatibility guard

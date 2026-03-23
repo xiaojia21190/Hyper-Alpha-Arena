@@ -100,7 +100,7 @@ export default function SplashScreen({ onComplete, minDuration = 1500, isReady =
     <div className="fixed inset-0 bg-background flex flex-col items-center justify-center z-50">
       <div className="flex flex-col items-center space-y-6">
         <img
-          src="/static/arena_logo_app_small.png"
+          src="/arena_logo_app_small.png"
           alt="Hyper Alpha Arena"
           className="w-24 h-24 object-contain"
         />

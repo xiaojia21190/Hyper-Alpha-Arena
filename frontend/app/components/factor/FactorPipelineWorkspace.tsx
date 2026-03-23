@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -121,6 +121,8 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
   const [researchStatusLoading, setResearchStatusLoading] = useState(true)
   const [researchStarting, setResearchStarting] = useState(false)
   const [statusError, setStatusError] = useState('')
+  const [statusNotice, setStatusNotice] = useState('')
+  const statusRequestInFlightRef = useRef(false)
 
   const [portfolioSnapshot, setPortfolioSnapshot] = useState<{
     portfolio_candidates: FactorPortfolioCandidate[]
@@ -140,6 +142,8 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
   const [liveGateSnapshot, setLiveGateSnapshot] = useState<FactorLiveGateSnapshot | null>(null)
 
   const loadResearchStatus = useCallback(async (showLoader = false) => {
+    if (statusRequestInFlightRef.current) return
+    statusRequestInFlightRef.current = true
     if (showLoader) setResearchStatusLoading(true)
     try {
       const payload = await getFactorResearchStatus()
@@ -148,6 +152,7 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
     } catch (e: any) {
       setStatusError(e?.message || (isZh ? '读取研究状态失败' : 'Failed to load research status'))
     } finally {
+      statusRequestInFlightRef.current = false
       if (showLoader) setResearchStatusLoading(false)
     }
   }, [isZh])
@@ -288,6 +293,7 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
   const handleResearchRun = useCallback(async () => {
     setResearchStarting(true)
     setStatusError('')
+    setStatusNotice('')
     try {
       const config: FactorResearchRunConfig = {
         ...DEFAULT_RESEARCH_RUN_CONFIG,
@@ -295,16 +301,52 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
       }
       const response = await triggerFactorResearchRun(config)
       if (response.status === 'already_running') {
-        setStatusError(isZh ? '研究任务已在运行' : 'Research run is already running')
+        setStatusNotice(isZh ? '研究任务已在后台运行' : 'Research run is already running in the background')
+        setResearchStatus((prev) => (prev ? { ...prev, status: 'running' } : prev))
+      } else {
+        const now = Math.floor(Date.now() / 1000)
+        setStatusNotice(isZh ? '已触发研究，结果将稍后刷新' : 'Research run started. Results will refresh shortly.')
+        setResearchStatus((prev) => {
+          if (!prev) {
+            return {
+              enabled: false,
+              status: 'running',
+              interval_seconds: null,
+              config,
+              last_run_status: 'running',
+              last_run_started_at: now,
+              last_run_completed_at: null,
+              last_error: null,
+              last_top_factor: null,
+              last_top_portfolio: null,
+              last_result: null,
+              progress: {
+                phase: 'queued',
+                current: 0,
+                total: 0,
+                updated_at: now,
+              },
+            }
+          }
+          return {
+            ...prev,
+            status: 'running',
+            last_run_status: 'running',
+            last_run_started_at: now,
+            last_error: null,
+          }
+        })
       }
-      await loadResearchStatus(true)
-      await loadLiveGateSnapshot()
+      void loadResearchStatus(true)
+      void loadLiveGateSnapshot()
+      void loadPortfolioSnapshot()
     } catch (e: any) {
+      setStatusNotice('')
       setStatusError(e?.message || (isZh ? '启动研究失败' : 'Failed to start research'))
     } finally {
       setResearchStarting(false)
     }
-  }, [isZh, loadLiveGateSnapshot, loadResearchStatus, researchStatus?.config])
+  }, [isZh, loadLiveGateSnapshot, loadPortfolioSnapshot, loadResearchStatus, researchStatus?.config])
 
   const handleDeployPortfolioPaper = useCallback(async () => {
     if (!topPortfolioId) return
@@ -421,6 +463,11 @@ export default function FactorPipelineWorkspace({ view }: { view: FactorPipeline
       {statusError && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-500">
           {statusError}
+        </div>
+      )}
+      {statusNotice && (
+        <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-700">
+          {statusNotice}
         </div>
       )}
 

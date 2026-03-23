@@ -18,7 +18,6 @@ import {
   PromptBinding,
   TradingAccount,
 } from '@/lib/api'
-import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -119,9 +118,6 @@ export default function PromptManager() {
     setVariablesRefContent('')
     setVariablesRefLang('')
   }, [i18n.language])
-
-  // Auth context
-  const { user, membership } = useAuth()
 
   const selectedTemplate = useMemo(
     () => templates.find((tpl) => tpl.id === selectedId) || null,
@@ -382,12 +378,6 @@ export default function PromptManager() {
   }
 
   const handleAiWriteClick = () => {
-    // Check if user is logged in
-    if (!user) {
-      toast.error('Please log in to use this feature')
-      return
-    }
-
     // Limited Time Free - skip premium check
     // Open AI generator
     setAiChatModalOpen(true)

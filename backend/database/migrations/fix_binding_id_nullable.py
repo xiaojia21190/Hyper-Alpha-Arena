@@ -42,9 +42,12 @@ def run_migration(engine):
         print("✅ Made program_execution_logs.binding_id nullable")
 
 
-if __name__ == "__main__":
-    # For standalone testing
-    import sys
-    sys.path.insert(0, "/home/wwwroot/hyper-alpha-arena-prod/backend")
+def upgrade():
+    """Migration manager entrypoint."""
     from database.connection import engine
+
     run_migration(engine)
+
+
+if __name__ == "__main__":
+    upgrade()

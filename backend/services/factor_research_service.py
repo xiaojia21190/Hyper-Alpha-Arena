@@ -1328,6 +1328,7 @@ class FactorResearchAutomationService:
         self._progress: Optional[dict[str, Any]] = None
         self._lock = threading.Lock()
         self._current_thread: Optional[threading.Thread] = None
+        self._hydrate_last_persisted_status()
 
     def start(self, interval_seconds: int, run_immediately: bool = False, **config: Any) -> None:
         self._interval_seconds = int(interval_seconds)
@@ -1533,6 +1534,131 @@ class FactorResearchAutomationService:
             merged_progress.update(progress)
             merged_progress["updated_at"] = progress.get("updated_at", time.time())
             self._progress = merged_progress
+
+    @staticmethod
+    def _parse_json_safe(payload: Any) -> Optional[dict[str, Any]]:
+        if payload is None:
+            return None
+        if isinstance(payload, dict):
+            return payload
+        if not isinstance(payload, str) or payload.strip() == "":
+            return None
+        try:
+            loaded = json.loads(payload)
+        except json.JSONDecodeError:
+            return None
+        return loaded if isinstance(loaded, dict) else None
+
+    @staticmethod
+    def _to_unix_timestamp(value: Optional[datetime]) -> Optional[float]:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.timestamp()
+
+    def _hydrate_last_persisted_status(self) -> None:
+        db = None
+        try:
+            db = self.session_factory()
+            if not hasattr(db, "query"):
+                return
+            from database.models import FactorResearchRun
+
+            run = (
+                db.query(FactorResearchRun)
+                .filter(FactorResearchRun.status == "success")
+                .order_by(FactorResearchRun.created_at.desc(), FactorResearchRun.id.desc())
+                .first()
+            )
+            if run is None:
+                return
+
+            parsed_result = self._parse_json_safe(getattr(run, "result_json", None))
+            parsed_top_factor = self._parse_json_safe(getattr(run, "top_factor_json", None))
+            parsed_top_portfolio = self._parse_json_safe(
+                getattr(run, "top_portfolio_json", None)
+            )
+
+            self._config = {
+                **dict(DEFAULT_RESEARCH_RUN_CONFIG),
+                "exchange": getattr(run, "exchange", DEFAULT_RESEARCH_RUN_CONFIG["exchange"]),
+                "top_n_symbols": int(
+                    getattr(run, "top_n_symbols", DEFAULT_RESEARCH_RUN_CONFIG["top_n_symbols"])
+                ),
+                "lookback_days": int(
+                    getattr(run, "lookback_days", DEFAULT_RESEARCH_RUN_CONFIG["lookback_days"])
+                ),
+                "objective": getattr(run, "objective", DEFAULT_RESEARCH_RUN_CONFIG["objective"]),
+                "factor_scope": getattr(
+                    run, "factor_scope", DEFAULT_RESEARCH_RUN_CONFIG["factor_scope"]
+                ),
+                "period": getattr(run, "period", DEFAULT_RESEARCH_RUN_CONFIG["period"]),
+                "prescreen_limit": int(
+                    getattr(
+                        run,
+                        "prescreen_limit",
+                        DEFAULT_RESEARCH_RUN_CONFIG["prescreen_limit"],
+                    )
+                ),
+            }
+            self._last_result = parsed_result
+            self._last_top_factor = parsed_top_factor or (
+                (parsed_result or {}).get("top_factor") if parsed_result else None
+            )
+            self._last_top_portfolio = parsed_top_portfolio or (
+                (parsed_result or {}).get("top_portfolio") if parsed_result else None
+            )
+            self._last_error = None
+            self._last_run_status = "success"
+            self._last_run_started_at = self._to_unix_timestamp(
+                getattr(run, "started_at", None)
+            )
+            self._last_run_completed_at = self._to_unix_timestamp(
+                getattr(run, "completed_at", None)
+            )
+
+            candidate_count = 0
+            top_factor_name = None
+            if isinstance(parsed_result, dict):
+                candidate_count = int(
+                    parsed_result.get(
+                        "full_backtest_candidate_count",
+                        parsed_result.get("candidate_count", 0),
+                    )
+                    or 0
+                )
+                top_factor_name = ((parsed_result.get("top_factor") or {}).get("factor_name"))
+            self._progress = {
+                "phase": "complete",
+                "current": candidate_count,
+                "total": candidate_count,
+                "current_factor": top_factor_name,
+                "candidate_count": int(
+                    ((parsed_result or {}).get("candidate_count", 0)) if parsed_result else 0
+                ),
+                "fast_candidate_count": int(
+                    ((parsed_result or {}).get("fast_candidate_count", 0))
+                    if parsed_result
+                    else 0
+                ),
+                "full_backtest_candidate_count": candidate_count,
+                "fast_backtest_days": (parsed_result or {}).get("fast_backtest_days")
+                if parsed_result
+                else None,
+                "fast_backtest_symbol_count": (
+                    (parsed_result or {}).get("fast_backtest_symbol_count")
+                    if parsed_result
+                    else None
+                ),
+                "updated_at": time.time(),
+            }
+        except Exception:
+            logger.exception("[FactorResearch] Failed to hydrate last persisted run status")
+        finally:
+            close = getattr(db, "close", None)
+            if callable(close):
+                close()
 
 
 factor_research_automation_service = FactorResearchAutomationService()

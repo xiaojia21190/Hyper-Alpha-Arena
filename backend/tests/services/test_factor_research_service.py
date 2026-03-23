@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timezone
 
 from services import factor_research_service as factor_research_service_module
 from services.factor_research_service import (
@@ -720,6 +721,82 @@ def test_factor_research_automation_service_start_registers_interval_task():
     assert scheduler.added[0]["interval_seconds"] == 900
     assert scheduler.added[0]["task_id"] == service.TASK_ID
     assert service.get_status()["config"]["lookback_days"] == 180
+
+
+def test_factor_research_automation_service_hydrates_latest_success_from_db():
+    assert hasattr(factor_research_service_module, "FactorResearchAutomationService")
+
+    class _DummyScheduler:
+        def remove_task(self, task_id):
+            return None
+
+        def add_interval_task(self, task_func, interval_seconds, task_id, *args, **kwargs):
+            return None
+
+    class _RunRow:
+        def __init__(self):
+            self.id = 99
+            self.exchange = "hyperliquid"
+            self.top_n_symbols = 20
+            self.lookback_days = 180
+            self.objective = "return_over_drawdown"
+            self.factor_scope = "builtin_only"
+            self.period = "1h"
+            self.prescreen_limit = 10
+            self.status = "success"
+            self.result_json = (
+                '{"symbols":["BTC","ETH"],'
+                '"candidate_count":3,'
+                '"full_backtest_candidate_count":2,'
+                '"top_factor":{"factor_name":"ATR_RATIO","score":2.4}}'
+            )
+            self.top_factor_json = '{"factor_name":"ATR_RATIO","score":2.4}'
+            self.top_portfolio_json = '{"name":"Top Portfolio","portfolio_id":123}'
+            self.started_at = datetime.now(timezone.utc)
+            self.completed_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(timezone.utc)
+
+    class _DummyQuery:
+        def __init__(self, row):
+            self._row = row
+
+        def filter(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def first(self):
+            return self._row
+
+    class _DummyDb:
+        def __init__(self, row):
+            self._row = row
+            self.closed = False
+
+        def query(self, *_args, **_kwargs):
+            return _DummyQuery(self._row)
+
+        def close(self):
+            self.closed = True
+
+    db = _DummyDb(_RunRow())
+    service = factor_research_service_module.FactorResearchAutomationService(
+        scheduler=_DummyScheduler(),
+        session_factory=lambda: db,
+        research_service_factory=lambda _db: object(),
+    )
+
+    status = service.get_status()
+
+    assert status["status"] == "idle"
+    assert status["last_run_status"] == "success"
+    assert status["config"]["lookback_days"] == 180
+    assert status["last_result"]["symbols"] == ["BTC", "ETH"]
+    assert status["last_top_factor"]["factor_name"] == "ATR_RATIO"
+    assert status["last_top_portfolio"]["portfolio_id"] == 123
+    assert status["progress"]["phase"] == "complete"
+    assert db.closed is True
 
 
 def test_factor_research_automation_service_run_now_tracks_last_result():

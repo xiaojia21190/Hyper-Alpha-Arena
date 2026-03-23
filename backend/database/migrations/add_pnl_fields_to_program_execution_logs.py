@@ -79,6 +79,11 @@ def run_migration():
         db.close()
 
 
+def upgrade():
+    """Migration manager entrypoint."""
+    run_migration()
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    run_migration()
+    upgrade()

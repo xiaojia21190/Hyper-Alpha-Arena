@@ -484,12 +484,22 @@ def on_startup():
     # This prevents timeout on first indicator calculation
     def warmup_numba():
         try:
-            from services.technical_indicators import calculate_indicator
+            from services.technical_indicators import (
+                PANDAS_TA_AVAILABLE,
+                PANDAS_TA_IMPORT_ERROR,
+                calculate_indicator,
+            )
+            if not PANDAS_TA_AVAILABLE:
+                print(
+                    f"[startup] Skipping numba warmup: pandas_ta unavailable ({PANDAS_TA_IMPORT_ERROR})"
+                )
+                return
             from database.connection import SessionLocal
             db = SessionLocal()
             try:
                 print("[startup] Warming up numba JIT compilation...")
-                calculate_indicator(db, "BTC", "BOLL", "1h")
+                current_time_ms = int(time.time() * 1000)
+                calculate_indicator(db, "BTC", "BOLL", "1h", current_time_ms)
                 print("[startup] Numba warmup completed")
             finally:
                 db.close()
@@ -605,7 +615,6 @@ from api.prompt_routes import router as prompt_router
 from api.sampling_routes import router as sampling_router
 from api.hyperliquid_action_routes import router as hyperliquid_action_router
 from api.hyperliquid_routes import router as hyperliquid_router
-from api.user_routes import router as user_router
 from api.kline_routes import router as kline_router
 from api.kline_analysis_routes import router as kline_analysis_router
 from api.market_flow_routes import router as market_flow_router
@@ -637,7 +646,6 @@ app.include_router(prompt_router)
 app.include_router(sampling_router)
 app.include_router(hyperliquid_action_router)
 app.include_router(hyperliquid_router)
-app.include_router(user_router)
 app.include_router(kline_router)
 app.include_router(kline_analysis_router)
 app.include_router(market_flow_router)
@@ -696,27 +704,6 @@ from api.ws import websocket_endpoint
 
 app.websocket("/ws")(websocket_endpoint)
 
-# Serve auth config file
-@app.get("/auth-config.json")
-async def serve_auth_config():
-    """Serve the auth configuration file"""
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    config_path = os.path.join(static_dir, "auth-config.json")
-
-    if os.path.exists(config_path):
-        return FileResponse(
-            config_path,
-            media_type="application/json",
-            headers={
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0"
-            }
-        )
-    else:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Auth config not found")
-
 # Serve frontend index.html for root and SPA routes
 @app.get("/")
 async def serve_root():
@@ -741,7 +728,7 @@ async def serve_root():
 async def serve_spa(full_path: str):
     """Serve the frontend index.html for SPA routes that don't match API/static"""
     # Skip API and static routes
-    if full_path.startswith("api") or full_path.startswith("static") or full_path.startswith("docs") or full_path.startswith("openapi.json") or full_path == "auth-config.json":
+    if full_path.startswith("api") or full_path.startswith("static") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")
     

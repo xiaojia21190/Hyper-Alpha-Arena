@@ -144,7 +144,7 @@ export default function HyperAiOnboarding({ onComplete, onSkip }: HyperAiOnboard
         {/* Header */}
         <div className="text-center space-y-2">
           <img
-            src="/static/arena_logo_app_small.png"
+            src="/arena_logo_app_small.png"
             alt="Hyper Alpha Arena"
             className="w-16 h-16 mx-auto mb-4"
           />

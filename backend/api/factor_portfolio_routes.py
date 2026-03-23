@@ -29,7 +29,11 @@ class DeployPortfolioRequest(BaseModel):
 async def latest_factor_portfolio_run(db: Session = Depends(get_db)):
     payload = get_latest_portfolio_run(db)
     if payload is None:
-        raise HTTPException(status_code=404, detail="No successful factor portfolio run found")
+        return {
+            "run": None,
+            "portfolio_candidates": [],
+            "top_portfolio": None,
+        }
     return payload
 
 
@@ -37,7 +41,11 @@ async def latest_factor_portfolio_run(db: Session = Depends(get_db)):
 async def latest_live_gate_status(db: Session = Depends(get_db)):
     payload = get_latest_live_gate_status(db)
     if payload is None:
-        raise HTTPException(status_code=404, detail="No successful factor research run found")
+        return {
+            "latest_run": None,
+            "decision_run": None,
+            "live_decision": None,
+        }
     return payload
 
 

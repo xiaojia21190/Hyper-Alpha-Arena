@@ -34,26 +34,27 @@ async def get_factor_research_status():
 
 @router.post("/run", status_code=202)
 async def run_factor_research(
-    request: ResearchRunRequest,
+    request: ResearchRunRequest | None = None,
 ):
+    payload = request or ResearchRunRequest()
     try:
         return factor_research_automation_service.trigger_run(
-            exchange=request.exchange,
-            top_n_symbols=request.top_n_symbols,
-            lookback_days=request.lookback_days,
-            objective=request.objective,
-            factor_scope=request.factor_scope,
-            period=request.period,
-            prescreen_limit=request.prescreen_limit,
-            auto_promote_paper=request.auto_promote_paper,
-            paper_account_id=request.paper_account_id,
-            auto_promote_live=request.auto_promote_live,
-            live_account_id=request.live_account_id,
-            live_min_observation_hours=request.live_min_observation_hours,
-            live_min_trades=request.live_min_trades,
-            live_min_net_pnl=request.live_min_net_pnl,
-            live_min_win_rate=request.live_min_win_rate,
-            live_max_drawdown_percent=request.live_max_drawdown_percent,
+            exchange=payload.exchange,
+            top_n_symbols=payload.top_n_symbols,
+            lookback_days=payload.lookback_days,
+            objective=payload.objective,
+            factor_scope=payload.factor_scope,
+            period=payload.period,
+            prescreen_limit=payload.prescreen_limit,
+            auto_promote_paper=payload.auto_promote_paper,
+            paper_account_id=payload.paper_account_id,
+            auto_promote_live=payload.auto_promote_live,
+            live_account_id=payload.live_account_id,
+            live_min_observation_hours=payload.live_min_observation_hours,
+            live_min_trades=payload.live_min_trades,
+            live_min_net_pnl=payload.live_min_net_pnl,
+            live_min_win_rate=payload.live_min_win_rate,
+            live_max_drawdown_percent=payload.live_max_drawdown_percent,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

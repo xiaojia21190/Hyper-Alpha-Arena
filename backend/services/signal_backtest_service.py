@@ -11,6 +11,7 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from services.pandas_ta_compat import load_pandas_ta
 
 # Configure logger to output to stdout for debugging
 logger = logging.getLogger(__name__)
@@ -647,7 +648,7 @@ class SignalBacktestService:
         """
         import pandas as pd
         try:
-            import pandas_ta as ta
+            ta = load_pandas_ta()
         except Exception as exc:
             logger.warning(f"[Backtest] pandas_ta unavailable, skip MACD triggers: {exc}")
             return []

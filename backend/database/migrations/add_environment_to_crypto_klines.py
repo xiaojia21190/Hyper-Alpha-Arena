@@ -31,6 +31,11 @@ def upgrade():
 
     db = SessionLocal()
     try:
+        if db.bind is not None and db.bind.dialect.name == "postgresql":
+            # Avoid indefinite startup stalls when another session keeps table locks open.
+            db.execute(text("SET LOCAL lock_timeout = '5000ms'"))
+            db.execute(text("SET LOCAL statement_timeout = '120000ms'"))
+
         # Step 1: Add environment column with default value (idempotent)
         print("Adding environment column to crypto_klines table...")
         db.execute(text("""

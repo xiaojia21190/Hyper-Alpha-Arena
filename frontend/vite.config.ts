@@ -7,7 +7,20 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "dev-static-prefix-rewrite",
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          if (req.url?.startsWith("/static/")) {
+            req.url = req.url.replace("/static/", "/")
+          }
+          next()
+        })
+      },
+    },
+  ],
   build: {
     rollupOptions: {
       output: {

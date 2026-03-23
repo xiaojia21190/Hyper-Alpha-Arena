@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 from asteval import Interpreter
 from typing import Dict, List, Optional, Tuple
+from services.pandas_ta_compat import load_pandas_ta
 
 logger = logging.getLogger(__name__)
 
@@ -158,8 +159,7 @@ class FactorExpressionEngine:
 
     def _ensure_ta(self):
         if self._ta is None:
-            import pandas_ta as ta
-            self._ta = ta
+            self._ta = load_pandas_ta()
 
     def _to_series(self, x) -> pd.Series:
         if isinstance(x, pd.Series):

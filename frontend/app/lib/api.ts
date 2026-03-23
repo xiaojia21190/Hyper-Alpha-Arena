@@ -23,15 +23,29 @@ export async function apiRequest(
   const response = await fetch(url, defaultOptions)
   
   if (!response.ok) {
+    let errorMessage = `HTTP error! status: ${response.status}`
     // Try to extract error message from response body
     try {
       const errorData = await response.json()
-      const errorMessage = errorData.detail || errorData.message || `HTTP error! status: ${response.status}`
-      throw new Error(errorMessage)
-    } catch (e) {
-      // If parsing fails, throw generic error
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const detail = errorData?.detail
+      if (typeof detail === 'string' && detail.trim().length > 0) {
+        errorMessage = detail
+      } else if (Array.isArray(detail) && detail.length > 0) {
+        const firstDetail = detail[0]
+        if (typeof firstDetail === 'string' && firstDetail.trim().length > 0) {
+          errorMessage = firstDetail
+        } else if (firstDetail?.msg && typeof firstDetail.msg === 'string') {
+          errorMessage = firstDetail.msg
+        } else {
+          errorMessage = JSON.stringify(detail)
+        }
+      } else if (typeof errorData?.message === 'string' && errorData.message.trim().length > 0) {
+        errorMessage = errorData.message
+      }
+    } catch {
+      // Keep generic fallback when body cannot be parsed as JSON.
     }
+    throw new Error(errorMessage)
   }
   
   const contentType = response.headers.get('content-type')
@@ -124,20 +138,6 @@ export async function getAIDecisionStats(accountId: number, days?: number): Prom
   const params = days ? `?days=${days}` : ''
   const response = await apiRequest(`/accounts/${accountId}/ai-decisions/stats${params}`)
   return response.json()
-}
-
-// User authentication interfaces
-export interface User {
-  id: number
-  username: string
-  email?: string
-  is_active: boolean
-}
-
-export interface UserAuthResponse {
-  user: User
-  session_token: string
-  expires_at: string
 }
 
 // Trading Account management functions
@@ -369,34 +369,6 @@ export async function previewPrompt(
   return response.json()
 }
 
-
-export async function loginUser(username: string, password: string): Promise<UserAuthResponse> {
-  const response = await apiRequest('/users/login', {
-    method: 'POST',
-    body: JSON.stringify({ username, password }),
-  })
-  return response.json()
-}
-
-export async function getUserProfile(sessionToken: string): Promise<User> {
-  const response = await apiRequest(`/users/profile?session_token=${sessionToken}`)
-  return response.json()
-}
-
-// Trading Account management functions (matching backend query parameter style)
-export async function listTradingAccounts(sessionToken: string): Promise<TradingAccount[]> {
-  const response = await apiRequest(`/accounts/?session_token=${sessionToken}`)
-  return response.json()
-}
-
-export async function createTradingAccount(account: TradingAccountCreate, sessionToken: string): Promise<TradingAccount> {
-  const response = await apiRequest(`/accounts/?session_token=${sessionToken}`, {
-    method: 'POST',
-    body: JSON.stringify(account),
-  })
-  return response.json()
-}
-
 export async function getAccountStrategy(accountId: number): Promise<StrategyConfig> {
   const response = await apiRequest(`/account/${accountId}/strategy`)
   return response.json()
@@ -408,20 +380,6 @@ export async function updateAccountStrategy(accountId: number, config: StrategyC
     body: JSON.stringify(config),
   })
   return response.json()
-}
-
-export async function updateTradingAccount(accountId: number, account: TradingAccountUpdate, sessionToken: string): Promise<TradingAccount> {
-  const response = await apiRequest(`/accounts/${accountId}?session_token=${sessionToken}`, {
-    method: 'PUT',
-    body: JSON.stringify(account),
-  })
-  return response.json()
-}
-
-export async function deleteTradingAccount(accountId: number, sessionToken: string): Promise<void> {
-  await apiRequest(`/accounts/${accountId}?session_token=${sessionToken}`, {
-    method: 'DELETE',
-  })
 }
 
 // Account functions for paper trading with hardcoded user
