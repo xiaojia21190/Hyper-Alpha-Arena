@@ -258,7 +258,7 @@ LAST_RUN_STATUS=""
 while true; do
   STATUS_JSON="$(curl -sS "${BASE_URL}/api/factor-research/status")"
   PARSED="$(
-    printf '%s' "${STATUS_JSON}" | python -c 'import json,sys; d=json.load(sys.stdin); print(f"{d.get(\"status\",\"\")}|{d.get(\"last_run_status\",\"\")}")'
+    printf '%s' "${STATUS_JSON}" | python -c 'import json,sys; d=json.load(sys.stdin); print("{}|{}".format(d.get("status",""), d.get("last_run_status","")))'
   )"
   FINAL_STATUS="${PARSED%%|*}"
   LAST_RUN_STATUS="${PARSED##*|}"
