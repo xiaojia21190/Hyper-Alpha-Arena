@@ -22,7 +22,7 @@ Non-goals for this iteration:
 - No replacement of existing Program Trader runtime.
 - No fully automatic live deployment without a manual gate.
 
-## Execution Status (2026-03-22)
+## Execution Status (2026-03-30)
 
 Completed in code:
 
@@ -49,6 +49,12 @@ Verification snapshot:
   - `docs/superpowers/plans/2026-03-22-factor-portfolio-go-live-checklist.md`
   - `backend/scripts/factor_portfolio_smoke.py`
 - Lightweight end-to-end smoke run result (local): PASS (`--top-n-symbols 3 --lookback-days 7 --prescreen-limit 2`).
+
+Current branch note:
+
+- This plan is implemented on the current branch and remains the main product surface.
+- Some later UI reshaping moved beyond `FactorLibrary.tsx` into dedicated workspace pages, but the portfolio platform behavior remains present.
+- The checkbox task list below was not backfilled after implementation. Treat this status section and the current codebase as authoritative.
 
 ## File Structure
 

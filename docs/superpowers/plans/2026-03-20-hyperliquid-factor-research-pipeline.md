@@ -10,6 +10,26 @@
 
 ---
 
+## Execution Status (2026-03-30)
+
+Status: foundational research pipeline is implemented in the current branch and is now part of the broader factor portfolio/runtime workflow.
+
+Implemented in current branch:
+
+- `backend/services/factor_research_service.py`
+- `backend/api/factor_research_routes.py`
+- `backend/tests/services/test_factor_research_service.py`
+- `backend/tests/services/test_factor_effectiveness_service.py`
+- `backend/tests/services/test_factor_research_integration.py`
+- `backend/tests/api/test_factor_research_routes.py`
+
+Notes:
+
+- This document is the foundation plan. Later plans extend it rather than replace it outright:
+  - `2026-03-22-auto-factor-portfolio-platform.md`
+  - `2026-03-27-factor-runtime.md`
+- The checkbox task list below was not backfilled after implementation. Use this status block plus current code as the source of truth for completion on the current branch.
+
 ## File Structure
 
 ### New files

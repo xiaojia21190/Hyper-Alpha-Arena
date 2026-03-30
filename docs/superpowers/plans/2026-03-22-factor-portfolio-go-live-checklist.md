@@ -4,6 +4,19 @@
 
 ---
 
+## Execution Status (2026-03-30)
+
+Status: active operator runbook for the current branch.
+
+Notes:
+
+- This file is not an implementation backlog. It remains relevant as a verification and rehearsal checklist for the delivered factor portfolio flow.
+- The APIs and runtime flow referenced here exist on the current branch:
+  - `/api/factor-research/*`
+  - `/api/factor-portfolios/*`
+  - deployed program bindings via the factor runtime profile
+- Re-run the commands in Section 2 before using this as a release/go-live gate, because the historical PASS notes in related plans are snapshots, not standing guarantees.
+
 ## 1) Preflight
 
 - Ensure backend is running and reachable.

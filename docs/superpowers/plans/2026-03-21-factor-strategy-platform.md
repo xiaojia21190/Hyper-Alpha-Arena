@@ -10,6 +10,28 @@
 
 ---
 
+## Execution Status (2026-03-30)
+
+Status: not implemented in the current branch. This plan has partial/advanced work on branch `sdd/factor-strategy-platform`, but that branch is not merged into `chore/continue-superpowers-factor-runtime`.
+
+Current-branch reality:
+
+- The current product flow is `Factor Research Workspace -> Portfolio Deployments -> Live Gate`.
+- Current branch does not contain the strategy-lifecycle files described in this plan, such as:
+  - `backend/services/factor_strategy_service.py`
+  - `backend/api/factor_strategy_routes.py`
+  - `frontend/app/components/strategy/StrategiesPage.tsx`
+  - `frontend/app/components/strategy/StrategyRunsPage.tsx`
+  - `frontend/app/components/strategy/StrategyReviewPage.tsx`
+
+Interpretation:
+
+- Treat this document as `branch-only / not merged`.
+- For the current branch, the effective successor plans are:
+  - `2026-03-22-auto-factor-portfolio-platform.md`
+  - `2026-03-27-factor-runtime.md`
+  - `2026-03-27-factor-cleanup-pass-1.md`
+
 ## Scope Check
 
 This spec spans backend domain modeling, research orchestration, lifecycle APIs, and frontend information architecture. Those areas are broad, but for v1 they are not independent products. They form one sequential closed loop:
