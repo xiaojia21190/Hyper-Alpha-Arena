@@ -163,3 +163,117 @@ def test_main_returns_non_zero_when_triggered_run_finishes_with_error(monkeypatc
 
     output = capsys.readouterr().out
     assert "[error] latest run failed: factor run crashed" in output
+
+
+def test_main_runs_canonical_paper_deploy_rehearsal(monkeypatch, capsys):
+    smoke = _load_smoke_module()
+    post_calls: list[tuple[str, dict[str, object]]] = []
+
+    responses = {
+        "/api/factor-research/status": (
+            200,
+            {
+                "status": "idle",
+                "last_run_status": "success",
+                "last_run_completed_at": "2026-03-30T00:00:00Z",
+            },
+        ),
+        "/api/factor-portfolios/latest": (
+            200,
+            {
+                "run": {"id": 77, "status": "success"},
+                "top_portfolio": {"portfolio_id": 101, "name": "score_weighted_top_n"},
+            },
+        ),
+        "/api/factor-portfolios/runs/77": (
+            200,
+            {"portfolio_candidates": [{"id": 101}, {"id": 102}]},
+        ),
+        "/api/factor-portfolios/deployments?limit=5": (
+            200,
+            {"items": [{"id": 1, "mode": "paper", "status": "deployed"}]},
+        ),
+        "/api/factor-portfolios/live-gate/latest": (
+            200,
+            {
+                "latest_run": {"id": 77, "status": "success"},
+                "decision_run": {"id": 76, "status": "success"},
+                "live_decision": {"decision": "not_ready", "reason": "gate_not_passed"},
+            },
+        ),
+    }
+
+    monkeypatch.setattr(smoke, "_get", lambda _base_url, path: responses[path])
+    monkeypatch.setattr(
+        smoke,
+        "_post",
+        lambda _base_url, path, payload: (
+            post_calls.append((path, payload)) or (
+                (202, {"status": "started"})
+                if path == "/api/factor-research/run"
+                else (200, {"deployment": {"id": 88, "mode": "paper", "status": "deployed"}})
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        smoke,
+        "_wait_for_run_completion",
+        lambda *_args: {
+            "status": "idle",
+            "last_run_status": "success",
+            "last_run_completed_at": "2026-03-30T00:05:00Z",
+        },
+    )
+    monkeypatch.setattr(
+        smoke.sys,
+        "argv",
+        [
+          "factor_portfolio_smoke.py",
+          "--trigger-run",
+          "--deploy-paper-account-id",
+          "2",
+          "--top-n-symbols",
+          "3",
+          "--lookback-days",
+          "7",
+          "--prescreen-limit",
+          "2",
+          "--wait-timeout",
+          "180",
+          "--poll-seconds",
+          "2",
+        ],
+    )
+
+    assert smoke.main() == 0
+
+    assert post_calls == [
+        (
+            "/api/factor-research/run",
+            {
+                "exchange": "hyperliquid",
+                "top_n_symbols": 3,
+                "lookback_days": 7,
+                "objective": "return_over_drawdown",
+                "factor_scope": "builtin_only",
+                "period": "1h",
+                "prescreen_limit": 2,
+                "auto_promote_paper": False,
+                "paper_account_id": 0,
+            },
+        ),
+        (
+            "/api/factor-portfolios/101/deploy-paper",
+            {
+                "account_id": 2,
+                "period": "1h",
+                "trigger_interval": 3600,
+                "signal_pool_ids": [],
+                "exchange": "hyperliquid",
+            },
+        ),
+    ]
+
+    output = capsys.readouterr().out
+    assert "trigger_status=started" in output
+    assert "[ok] deploy_id=88 mode=paper status=deployed" in output
