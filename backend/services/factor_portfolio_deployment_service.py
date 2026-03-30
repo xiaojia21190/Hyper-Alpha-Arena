@@ -7,7 +7,6 @@ from typing import Any, Optional
 
 from database.models import (
     Account,
-    AccountAssetSnapshot,
     AccountProgramBinding,
     FactorPortfolioCandidate,
     FactorPortfolioDeployment,
@@ -19,6 +18,13 @@ from database.models import (
 from services.factor_portfolio_service import build_weighted_portfolio_strategy_code
 
 logger = logging.getLogger(__name__)
+
+
+def _get_snapshot_session_and_model():
+    from database.snapshot_connection import SnapshotSessionLocal
+    from database.snapshot_models import HyperliquidAccountSnapshot
+
+    return SnapshotSessionLocal, HyperliquidAccountSnapshot
 
 
 def _parse_json(value: Any, default: Any):
@@ -318,20 +324,46 @@ class FactorPortfolioDeploymentService:
         win_rate_percent = (winning_trades / trade_count * 100.0) if trade_count else 0.0
         net_pnl = sum(pnl_values)
 
-        snapshots_query = self.db.query(AccountAssetSnapshot).filter(
-            AccountAssetSnapshot.account_id == int(paper_account_id),
+        snapshot_session_factory, snapshot_model = _get_snapshot_session_and_model()
+        account = self.db.query(Account).filter(Account.id == int(paper_account_id)).first()
+        snapshot_environment = (
+            account.hyperliquid_environment if account else None
         )
-        if observation_start is not None:
-            snapshots_query = snapshots_query.filter(
-                AccountAssetSnapshot.event_time >= observation_start
+        if snapshot_environment not in {"testnet", "mainnet"}:
+            logger.error(
+                "[FactorPortfolioDeployment] Invalid hyperliquid_environment for paper_account_id=%s: %s",
+                paper_account_id,
+                snapshot_environment,
             )
-        snapshots = (
-            snapshots_query.order_by(
-                AccountAssetSnapshot.event_time.asc(),
-                AccountAssetSnapshot.id.asc(),
-            ).all()
-        )
-        asset_values = [float(row.total_assets) for row in snapshots]
+            raise RuntimeError("snapshot_context_unavailable")
+        snapshot_db = snapshot_session_factory()
+        try:
+            snapshots_query = snapshot_db.query(snapshot_model).filter(
+                snapshot_model.account_id == int(paper_account_id),
+            )
+            snapshots_query = snapshots_query.filter(
+                snapshot_model.environment == snapshot_environment
+            )
+            if observation_start_utc is not None:
+                snapshots_query = snapshots_query.filter(
+                    snapshot_model.created_at >= observation_start_utc
+                )
+            snapshots = (
+                snapshots_query.order_by(
+                    snapshot_model.created_at.asc(),
+                    snapshot_model.id.asc(),
+                ).all()
+            )
+        except Exception as exc:
+            logger.exception(
+                "[FactorPortfolioDeployment] Failed to resolve snapshot context for paper_account_id=%s",
+                paper_account_id,
+            )
+            raise RuntimeError("snapshot_context_unavailable") from exc
+        finally:
+            snapshot_db.close()
+
+        asset_values = [float(row.total_equity) for row in snapshots]
         max_drawdown_percent = _calculate_max_drawdown_percent(asset_values)
 
         return {
@@ -391,11 +423,25 @@ class FactorPortfolioDeploymentService:
                 "live_deployment": None,
             }
 
-        context = self._resolve_paper_gate_context(
-            portfolio_id=portfolio_id,
-            paper_account_id=paper_account_id,
-            paper_deployment_id=paper_deployment_id,
-        )
+        try:
+            context = self._resolve_paper_gate_context(
+                portfolio_id=portfolio_id,
+                paper_account_id=paper_account_id,
+                paper_deployment_id=paper_deployment_id,
+            )
+        except Exception as exc:
+            logger.exception(
+                "[FactorPortfolioDeployment] Failed to resolve paper gate context for portfolio_id=%s",
+                portfolio_id,
+            )
+            return {
+                "decision": "error",
+                "reason": "paper_context_unavailable",
+                "error": str(exc),
+                "gate": None,
+                "paper_context": None,
+                "live_deployment": None,
+            }
         if context is None:
             return {
                 "decision": "not_ready",

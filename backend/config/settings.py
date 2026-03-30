@@ -3,6 +3,13 @@ from typing import Dict
 import os
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None:
@@ -65,10 +72,23 @@ class BinanceBrokerConfig(BaseModel):
     broker_id: str  # Broker ID for fee rebates
 
 
+def _get_runtime_profile() -> str:
+    raw = os.getenv("APP_RUNTIME_PROFILE", "full").strip().lower()
+    return raw if raw in {"api", "factor", "full"} else "full"
+
+
 # Binance Broker Configuration (optional, for fee rebates)
 BINANCE_BROKER_CONFIG = BinanceBrokerConfig(
     broker_id=os.getenv("BINANCE_BROKER_ID", "")  # Empty if not a broker
 )
+
+# Runtime startup profile
+APP_RUNTIME_PROFILE = _get_runtime_profile()
+BACKGROUND_SERVICES_ENABLED = APP_RUNTIME_PROFILE in {"factor", "full"}
+FACTOR_RUNTIME_ENABLED = APP_RUNTIME_PROFILE in {"factor", "full"}
+BINANCE_RUNTIME_ENABLED = APP_RUNTIME_PROFILE == "full"
+BOT_RUNTIME_ENABLED = APP_RUNTIME_PROFILE == "full"
+FRONTEND_WATCHER_ENABLED = _env_bool("FRONTEND_WATCHER_ENABLED", False)
 
 # Binance Daily Quota for non-rebate mainnet accounts
 # This limits the number of AI-executed trades per day to prevent excessive API usage

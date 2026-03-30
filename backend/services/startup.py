@@ -6,7 +6,6 @@ import threading
 from services.scheduler import start_scheduler, setup_market_tasks, task_scheduler
 from services.market_stream import start_market_stream, stop_market_stream
 from services.market_events import subscribe_price_updates, unsubscribe_price_updates
-from services.asset_snapshot_service import handle_price_update
 from services.trading_strategy import start_strategy_manager, stop_strategy_manager
 from services.hyperliquid_symbol_service import (
     refresh_hyperliquid_symbols,
@@ -17,258 +16,282 @@ from services.hyperliquid_symbol_service import (
 logger = logging.getLogger(__name__)
 
 
-def initialize_services():
-    """Initialize all services"""
-    try:
-        # Start the scheduler
-        print("Starting scheduler...")
-        start_scheduler()
-        print("Scheduler started")
-        logger.info("Scheduler service started")
-
-        # Refresh Hyperliquid symbol catalog + schedule periodic updates
-        refresh_hyperliquid_symbols()
-        schedule_symbol_refresh_task()
-
-        # Refresh Binance symbol catalog + schedule periodic updates
-        from services.binance_symbol_service import (
-            refresh_binance_symbols,
-            schedule_symbol_refresh_task as schedule_binance_symbol_refresh,
-        )
-        refresh_binance_symbols()
-        schedule_binance_symbol_refresh()
-        logger.info("[Binance] Symbol catalog refreshed and periodic refresh scheduled")
-
-        # Set up market-related scheduled tasks
-        setup_market_tasks()
-        logger.info("Market scheduled tasks have been set up")
-
-        # Add price cache cleanup task (every 2 minutes)
-        from services.price_cache import clear_expired_prices
-        task_scheduler.add_interval_task(
-            task_func=clear_expired_prices,
-            interval_seconds=120,  # Clean every 2 minutes
-            task_id="price_cache_cleanup"
-        )
-        logger.info("Price cache cleanup task started (2-minute interval)")
-
-        # Start market data stream
-        # NOTE: Paper trading snapshot service disabled - using Hyperliquid snapshots only
-        combined_symbols = build_market_stream_symbols()
-
-        # Use GlobalSamplingConfig.sampling_interval for market stream polling
-        # This reduces API calls significantly (from 1.5s to user-configured interval)
-        from database.connection import SessionLocal
-        from database.models import GlobalSamplingConfig
-        with SessionLocal() as db:
-            global_config = db.query(GlobalSamplingConfig).first()
-            # Default 18s, minimum 5s to prevent misconfiguration
-            stream_interval = max(5, global_config.sampling_interval if global_config else 18)
-
-        print(f"Starting market data stream (interval={stream_interval}s)...")
-        start_market_stream(combined_symbols, interval_seconds=stream_interval)
-        print("Market data stream started")
-        # subscribe_price_updates(handle_price_update)  # DISABLED: Paper trading snapshot
-        # print("Asset snapshot handler subscribed")
-        logger.info("Market data stream initialized")
-
-        # Subscribe strategy manager to price updates
-        from services.trading_strategy import handle_price_update as strategy_price_update
-
-        def strategy_price_wrapper(event):
-            """Wrapper to convert event format for strategy manager"""
-            symbol = event.get("symbol")
-            price = event.get("price")
-            event_time = event.get("event_time")
-            if symbol and price:
-                strategy_price_update(symbol, float(price), event_time)
-
-        subscribe_price_updates(strategy_price_wrapper)
-        logger.info("Strategy manager subscribed to price updates")
-
-        # Subscribe Program Trader to price updates (for scheduled triggers)
+def _program_price_update_handler(event: dict) -> None:
+    """Convert market event payload for ProgramExecutionService."""
+    symbol = event.get("symbol")
+    price = event.get("price")
+    event_time = event.get("event_time")
+    if symbol and price:
         from services.program_execution_service import program_execution_service
 
-        def program_price_wrapper(event):
-            """Wrapper to convert event format for program execution service"""
-            symbol = event.get("symbol")
-            price = event.get("price")
-            event_time = event.get("event_time")
-            if symbol and price:
-                program_execution_service.on_price_update(symbol, float(price), event_time)
+        program_execution_service.on_price_update(symbol, float(price), event_time)
 
-        subscribe_price_updates(program_price_wrapper)
-        logger.info("Program execution service subscribed to price updates")
 
-        # Start AI trading strategy manager
-        print("Starting strategy manager...")
-        start_strategy_manager()
-        print("Strategy manager started")
+def _strategy_price_update_handler(event: dict) -> None:
+    """Convert market event payload for strategy manager."""
+    symbol = event.get("symbol")
+    price = event.get("price")
+    event_time = event.get("event_time")
+    if symbol and price:
+        from services.trading_strategy import handle_price_update as strategy_price_update
 
-        # Start asset curve broadcast task (every 60 seconds)
-        from services.scheduler import start_asset_curve_broadcast
-        start_asset_curve_broadcast()
-        logger.info("Asset curve broadcast task started (60-second interval)")
+        strategy_price_update(symbol, float(price), event_time)
 
-        # Start Hyperliquid account snapshot service (every 30 seconds)
-        from services.hyperliquid_snapshot_service import hyperliquid_snapshot_service
-        import asyncio
-        asyncio.create_task(hyperliquid_snapshot_service.start())
-        logger.info("Hyperliquid snapshot service started (30-second interval)")
 
-        # Start Binance account snapshot service (every 5 minutes)
-        from services.binance_snapshot_service import binance_snapshot_service
-        asyncio.create_task(binance_snapshot_service.start())
-        logger.info("Binance snapshot service started (5-minute interval)")
+def _start_scheduler_services() -> None:
+    print("Starting scheduler...")
+    start_scheduler()
+    print("Scheduler started")
+    logger.info("Scheduler service started")
 
-        # Start K-line realtime collection service
-        from services.kline_realtime_collector import realtime_collector
-        asyncio.create_task(realtime_collector.start())
-        logger.info("K-line realtime collection service started (1-minute interval)")
+    refresh_hyperliquid_symbols()
+    schedule_symbol_refresh_task()
 
-        # Start market flow data collector (trades, orderbook, OI/funding)
-        from services.market_flow_collector import market_flow_collector, cleanup_old_market_flow_data
-        print("Starting market flow collector...")
-        market_flow_collector.start()
-        print("Market flow collector started")
-        logger.info("Market flow collector started (15-second aggregation)")
+    setup_market_tasks()
+    logger.info("Market scheduled tasks have been set up")
 
-        # Add market flow data cleanup task (every 6 hours)
-        task_scheduler.add_interval_task(
-            task_func=cleanup_old_market_flow_data,
-            interval_seconds=6 * 3600,  # 6 hours
-            task_id="market_flow_data_cleanup"
+    from services.price_cache import clear_expired_prices
+
+    task_scheduler.add_interval_task(
+        task_func=clear_expired_prices,
+        interval_seconds=120,
+        task_id="price_cache_cleanup",
+    )
+    logger.info("Price cache cleanup task started (2-minute interval)")
+
+
+def _start_hyperliquid_factor_market_services() -> None:
+    import asyncio
+
+    combined_symbols = build_market_stream_symbols()
+    from database.connection import SessionLocal
+    from database.models import GlobalSamplingConfig
+
+    with SessionLocal() as db:
+        global_config = db.query(GlobalSamplingConfig).first()
+        stream_interval = max(5, global_config.sampling_interval if global_config else 18)
+
+    print(f"Starting market data stream (interval={stream_interval}s)...")
+    start_market_stream(combined_symbols, interval_seconds=stream_interval)
+    print("Market data stream started")
+    logger.info("Market data stream initialized")
+
+    from services.hyperliquid_snapshot_service import hyperliquid_snapshot_service
+    from services.kline_realtime_collector import realtime_collector
+    from services.market_flow_collector import (
+        cleanup_old_market_flow_data,
+        market_flow_collector,
+    )
+
+    asyncio.create_task(hyperliquid_snapshot_service.start())
+    logger.info("Hyperliquid snapshot service started (30-second interval)")
+
+    asyncio.create_task(realtime_collector.start())
+    logger.info("K-line realtime collection service started (1-minute interval)")
+
+    print("Starting market flow collector...")
+    market_flow_collector.start()
+    print("Market flow collector started")
+    logger.info("Market flow collector started (15-second aggregation)")
+
+    task_scheduler.add_interval_task(
+        task_func=cleanup_old_market_flow_data,
+        interval_seconds=6 * 3600,
+        task_id="market_flow_data_cleanup",
+    )
+    logger.info("Market flow data cleanup task started (6-hour interval, 30-day retention)")
+
+
+def _start_factor_services() -> None:
+    from config.settings import (
+        FACTOR_ENGINE_ENABLED,
+        FACTOR_RESEARCH_AUTO_PROMOTE_LIVE,
+        FACTOR_RESEARCH_AUTO_PROMOTE_PAPER,
+        FACTOR_RESEARCH_ENABLED,
+        FACTOR_RESEARCH_EXCHANGE,
+        FACTOR_RESEARCH_FACTOR_SCOPE,
+        FACTOR_RESEARCH_INTERVAL_SECONDS,
+        FACTOR_RESEARCH_LIVE_ACCOUNT_ID,
+        FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT,
+        FACTOR_RESEARCH_LIVE_MIN_NET_PNL,
+        FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS,
+        FACTOR_RESEARCH_LIVE_MIN_TRADES,
+        FACTOR_RESEARCH_LIVE_MIN_WIN_RATE,
+        FACTOR_RESEARCH_LOOKBACK_DAYS,
+        FACTOR_RESEARCH_OBJECTIVE,
+        FACTOR_RESEARCH_PAPER_ACCOUNT_ID,
+        FACTOR_RESEARCH_PERIOD,
+        FACTOR_RESEARCH_PRESCREEN_LIMIT,
+        FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM,
+        FACTOR_RESEARCH_RUN_ON_STARTUP,
+        FACTOR_RESEARCH_TOP_N_SYMBOLS,
+    )
+
+    if FACTOR_ENGINE_ENABLED:
+        from services.factor_computation_service import factor_computation_service
+        from services.factor_effectiveness_service import factor_effectiveness_service
+
+        factor_computation_service.start()
+        factor_effectiveness_service.start()
+        logger.info("[FactorEngine] Factor computation + effectiveness services started")
+    else:
+        print("[FactorEngine] Disabled (set FACTOR_ENGINE_ENABLED=true to enable)")
+
+    if FACTOR_RESEARCH_ENABLED:
+        from services.factor_research_service import factor_research_automation_service
+
+        factor_research_automation_service.start(
+            interval_seconds=FACTOR_RESEARCH_INTERVAL_SECONDS,
+            exchange=FACTOR_RESEARCH_EXCHANGE,
+            top_n_symbols=FACTOR_RESEARCH_TOP_N_SYMBOLS,
+            lookback_days=FACTOR_RESEARCH_LOOKBACK_DAYS,
+            objective=FACTOR_RESEARCH_OBJECTIVE,
+            factor_scope=FACTOR_RESEARCH_FACTOR_SCOPE,
+            period=FACTOR_RESEARCH_PERIOD,
+            prescreen_limit=FACTOR_RESEARCH_PRESCREEN_LIMIT,
+            run_immediately=FACTOR_RESEARCH_RUN_ON_STARTUP,
+            auto_promote_paper=FACTOR_RESEARCH_AUTO_PROMOTE_PAPER,
+            paper_account_id=FACTOR_RESEARCH_PAPER_ACCOUNT_ID,
+            auto_promote_live=FACTOR_RESEARCH_AUTO_PROMOTE_LIVE,
+            live_account_id=FACTOR_RESEARCH_LIVE_ACCOUNT_ID,
+            live_min_observation_hours=FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS,
+            live_min_trades=FACTOR_RESEARCH_LIVE_MIN_TRADES,
+            live_min_net_pnl=FACTOR_RESEARCH_LIVE_MIN_NET_PNL,
+            live_min_win_rate=FACTOR_RESEARCH_LIVE_MIN_WIN_RATE,
+            live_max_drawdown_percent=FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT,
+            require_live_confirm=FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM,
         )
-        logger.info("Market flow data cleanup task started (6-hour interval, 30-day retention)")
+        logger.info("[FactorResearch] Automated research loop started")
+    else:
+        print("[FactorResearch] Disabled (set FACTOR_RESEARCH_ENABLED=true to enable)")
 
-        # Start Binance data collector (REST API polling) - uses Binance Watchlist
-        from services.exchanges.binance_collector import binance_collector
-        from services.binance_symbol_service import get_selected_symbols as get_binance_selected_symbols
-        binance_watchlist = get_binance_selected_symbols()
-        print(f"Starting Binance data collector with Binance watchlist: {binance_watchlist}")
-        binance_collector.start(symbols=binance_watchlist if binance_watchlist else ["BTC"])
-        print("Binance data collector started")
-        logger.info(f"[Binance] Data collector started with symbols: {binance_watchlist}")
 
-        # Start Binance WebSocket collector (15-second Taker Volume aggregation)
-        from services.exchanges.binance_ws_collector import binance_ws_collector
-        binance_ws_collector.start(symbols=binance_watchlist if binance_watchlist else ["BTC"])
-        print("Binance WebSocket collector started")
-        logger.info(f"[Binance] WebSocket collector started with symbols: {binance_watchlist}")
+def _start_program_execution_services() -> None:
+    subscribe_price_updates(_program_price_update_handler)
+    logger.info("Program execution service subscribed to price updates")
 
-        # Start Factor Computation Engine (if enabled)
-        from config.settings import (
-            FACTOR_ENGINE_ENABLED,
-            FACTOR_RESEARCH_ENABLED,
-            FACTOR_RESEARCH_EXCHANGE,
-            FACTOR_RESEARCH_FACTOR_SCOPE,
-            FACTOR_RESEARCH_INTERVAL_SECONDS,
-            FACTOR_RESEARCH_LOOKBACK_DAYS,
-            FACTOR_RESEARCH_OBJECTIVE,
-            FACTOR_RESEARCH_PERIOD,
-            FACTOR_RESEARCH_PRESCREEN_LIMIT,
-            FACTOR_RESEARCH_RUN_ON_STARTUP,
-            FACTOR_RESEARCH_TOP_N_SYMBOLS,
-            FACTOR_RESEARCH_AUTO_PROMOTE_PAPER,
-            FACTOR_RESEARCH_PAPER_ACCOUNT_ID,
-            FACTOR_RESEARCH_AUTO_PROMOTE_LIVE,
-            FACTOR_RESEARCH_LIVE_ACCOUNT_ID,
-            FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS,
-            FACTOR_RESEARCH_LIVE_MIN_TRADES,
-            FACTOR_RESEARCH_LIVE_MIN_NET_PNL,
-            FACTOR_RESEARCH_LIVE_MIN_WIN_RATE,
-            FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT,
-            FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM,
-        )
-        if FACTOR_ENGINE_ENABLED:
-            from services.factor_computation_service import factor_computation_service
-            from services.factor_effectiveness_service import factor_effectiveness_service
-            factor_computation_service.start()
-            factor_effectiveness_service.start()
-            logger.info("[FactorEngine] Factor computation + effectiveness services started")
-        else:
-            print("[FactorEngine] Disabled (set FACTOR_ENGINE_ENABLED=true to enable)")
 
-        if FACTOR_RESEARCH_ENABLED:
-            from services.factor_research_service import factor_research_automation_service
+def _stop_program_execution_services() -> None:
+    unsubscribe_price_updates(_program_price_update_handler)
 
-            factor_research_automation_service.start(
-                interval_seconds=FACTOR_RESEARCH_INTERVAL_SECONDS,
-                exchange=FACTOR_RESEARCH_EXCHANGE,
-                top_n_symbols=FACTOR_RESEARCH_TOP_N_SYMBOLS,
-                lookback_days=FACTOR_RESEARCH_LOOKBACK_DAYS,
-                objective=FACTOR_RESEARCH_OBJECTIVE,
-                factor_scope=FACTOR_RESEARCH_FACTOR_SCOPE,
-                period=FACTOR_RESEARCH_PERIOD,
-                prescreen_limit=FACTOR_RESEARCH_PRESCREEN_LIMIT,
-                run_immediately=FACTOR_RESEARCH_RUN_ON_STARTUP,
-                auto_promote_paper=FACTOR_RESEARCH_AUTO_PROMOTE_PAPER,
-                paper_account_id=FACTOR_RESEARCH_PAPER_ACCOUNT_ID,
-                auto_promote_live=FACTOR_RESEARCH_AUTO_PROMOTE_LIVE,
-                live_account_id=FACTOR_RESEARCH_LIVE_ACCOUNT_ID,
-                live_min_observation_hours=FACTOR_RESEARCH_LIVE_MIN_OBSERVATION_HOURS,
-                live_min_trades=FACTOR_RESEARCH_LIVE_MIN_TRADES,
-                live_min_net_pnl=FACTOR_RESEARCH_LIVE_MIN_NET_PNL,
-                live_min_win_rate=FACTOR_RESEARCH_LIVE_MIN_WIN_RATE,
-                live_max_drawdown_percent=FACTOR_RESEARCH_LIVE_MAX_DRAWDOWN_PERCENT,
-                require_live_confirm=FACTOR_RESEARCH_REQUIRE_LIVE_CONFIRM,
-            )
-            logger.info("[FactorResearch] Automated research loop started")
-        else:
-            print("[FactorResearch] Disabled (set FACTOR_RESEARCH_ENABLED=true to enable)")
+
+def _start_binance_services() -> None:
+    import asyncio
+
+    from services.binance_symbol_service import (
+        get_selected_symbols as get_binance_selected_symbols,
+        refresh_binance_symbols,
+        schedule_symbol_refresh_task as schedule_binance_symbol_refresh,
+    )
+    from services.binance_snapshot_service import binance_snapshot_service
+    from services.exchanges.binance_collector import binance_collector
+    from services.exchanges.binance_ws_collector import binance_ws_collector
+
+    refresh_binance_symbols()
+    schedule_binance_symbol_refresh()
+    logger.info("[Binance] Symbol catalog refreshed and periodic refresh scheduled")
+
+    asyncio.create_task(binance_snapshot_service.start())
+    logger.info("Binance snapshot service started (5-minute interval)")
+
+    binance_watchlist = get_binance_selected_symbols()
+    print(f"Starting Binance data collector with Binance watchlist: {binance_watchlist}")
+    symbols = binance_watchlist if binance_watchlist else ["BTC"]
+    binance_collector.start(symbols=symbols)
+    print("Binance data collector started")
+    logger.info(f"[Binance] Data collector started with symbols: {binance_watchlist}")
+
+    binance_ws_collector.start(symbols=symbols)
+    print("Binance WebSocket collector started")
+    logger.info(f"[Binance] WebSocket collector started with symbols: {binance_watchlist}")
+
+
+def _stop_binance_services() -> None:
+    from services.exchanges.binance_collector import binance_collector
+    from services.exchanges.binance_ws_collector import binance_ws_collector
+
+    binance_collector.stop()
+    binance_ws_collector.stop()
+
+
+def _start_bot_services() -> None:
+    from services.scheduler import start_asset_curve_broadcast
+
+    subscribe_price_updates(_strategy_price_update_handler)
+    logger.info("Strategy manager subscribed to price updates")
+
+    print("Starting strategy manager...")
+    start_strategy_manager()
+    print("Strategy manager started")
+
+    start_asset_curve_broadcast()
+    logger.info("Asset curve broadcast task started (60-second interval)")
+
+
+def _stop_bot_services() -> None:
+    unsubscribe_price_updates(_strategy_price_update_handler)
+    stop_strategy_manager()
+
+
+def _stop_hyperliquid_factor_market_services() -> None:
+    import asyncio
+
+    from services.hyperliquid_snapshot_service import hyperliquid_snapshot_service
+    from services.kline_realtime_collector import realtime_collector
+    from services.market_flow_collector import market_flow_collector
+
+    stop_market_stream()
+    hyperliquid_snapshot_service.stop()
+    asyncio.create_task(realtime_collector.stop())
+    market_flow_collector.stop()
+
+
+def _stop_factor_services() -> None:
+    from services.factor_research_service import factor_research_automation_service
+
+    factor_research_automation_service.stop()
+
+
+def initialize_services(profile: str = "full"):
+    """Initialize services by runtime profile."""
+    normalized_profile = (profile or "full").strip().lower()
+    try:
+        _start_scheduler_services()
+
+        if normalized_profile in {"factor", "full"}:
+            _start_hyperliquid_factor_market_services()
+            _start_factor_services()
+            _start_program_execution_services()
+
+        if normalized_profile == "full":
+            _start_binance_services()
+            _start_bot_services()
 
         logger.info("All services initialized successfully")
-
     except Exception as e:
         logger.error(f"Service initialization failed: {e}")
         raise
 
 
-def shutdown_services():
-    """Shut down all services"""
+def shutdown_services(profile: str = "full"):
+    """Shut down services by runtime profile."""
+    normalized_profile = (profile or "full").strip().lower()
     try:
+        if normalized_profile == "full":
+            _stop_bot_services()
+            _stop_binance_services()
+
+        if normalized_profile in {"factor", "full"}:
+            _stop_program_execution_services()
+            _stop_hyperliquid_factor_market_services()
+            _stop_factor_services()
+
         from services.scheduler import stop_scheduler
-        from services.hyperliquid_snapshot_service import hyperliquid_snapshot_service
-        from services.kline_realtime_collector import realtime_collector
-        from services.factor_research_service import factor_research_automation_service
-        import asyncio
-
-        stop_strategy_manager()
-        stop_market_stream()
-        unsubscribe_price_updates(handle_price_update)
-        hyperliquid_snapshot_service.stop()
-        factor_research_automation_service.stop()
-
-        # Stop K-line realtime collector
-        asyncio.create_task(realtime_collector.stop())
-
-        # Stop market flow collector
-        from services.market_flow_collector import market_flow_collector
-        market_flow_collector.stop()
-
-        # Stop Binance data collector
-        from services.exchanges.binance_collector import binance_collector
-        binance_collector.stop()
-
-        # Stop Binance WebSocket collector
-        from services.exchanges.binance_ws_collector import binance_ws_collector
-        binance_ws_collector.stop()
 
         stop_scheduler()
         logger.info("All services have been shut down")
-
     except Exception as e:
         logger.error(f"Failed to shut down services: {e}")
-
-
-async def startup_event():
-    """FastAPI application startup event"""
-    initialize_services()
-
-
-async def shutdown_event():
-    """FastAPI application shutdown event"""
-    await shutdown_services()
 
 
 def schedule_auto_trading(interval_seconds: int = 300, max_ratio: float = 0.2, use_ai: bool = True) -> None:

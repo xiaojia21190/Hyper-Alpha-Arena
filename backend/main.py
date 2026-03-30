@@ -35,7 +35,12 @@ def print(*args, **kwargs):
 
 from database.connection import engine, Base, SessionLocal
 from database.models import TradingConfig, User, SystemConfig
-from config.settings import DEFAULT_TRADING_CONFIGS
+from config.settings import (
+    APP_RUNTIME_PROFILE,
+    BACKGROUND_SERVICES_ENABLED,
+    DEFAULT_TRADING_CONFIGS,
+    FRONTEND_WATCHER_ENABLED,
+)
 from version import __version__
 
 app = FastAPI(
@@ -192,10 +197,12 @@ def watch_frontend_files():
 def on_startup():
     global frontend_watcher_thread
 
-    # Start frontend file watcher in background thread
-    frontend_watcher_thread = threading.Thread(target=watch_frontend_files, daemon=True)
-    frontend_watcher_thread.start()
-    print("Frontend file watcher started")
+    if FRONTEND_WATCHER_ENABLED:
+        frontend_watcher_thread = threading.Thread(target=watch_frontend_files, daemon=True)
+        frontend_watcher_thread.start()
+        print("[startup] Frontend file watcher started")
+    else:
+        print("[startup] Frontend file watcher disabled")
 
     # Create tables
     Base.metadata.create_all(bind=engine)
@@ -474,11 +481,19 @@ def on_startup():
     except Exception as e:
         print(f"⚠ Failed to clean up backfill tasks: {e}")
 
-    # Initialize all services (scheduler, market data tasks, auto trading, etc.)
-    print("About to initialize services...")
-    from services.startup import initialize_services
-    initialize_services()
-    print("Services initialization completed")
+    if BACKGROUND_SERVICES_ENABLED:
+        # Initialize all services (scheduler, market data tasks, auto trading, etc.)
+        print(f"[startup] Runtime profile '{APP_RUNTIME_PROFILE}' - initializing background services")
+        from services.startup import initialize_services
+
+        initialize_services(APP_RUNTIME_PROFILE)
+        print("[startup] Services initialization completed")
+    else:
+        print(
+            f"[startup] Runtime profile '{APP_RUNTIME_PROFILE}' - "
+            "skipping background services and warmup"
+        )
+        return
 
     # Warmup numba JIT compilation for pandas_ta indicators
     # This prevents timeout on first indicator calculation
@@ -510,102 +525,20 @@ def on_startup():
     threading.Thread(target=warmup_numba, daemon=True).start()
 
 
-@app.on_event("startup")
-async def restore_bot_webhooks():
-    """Restore Telegram webhook and register adapter after container restart."""
-    try:
-        from services.telegram_bot_service import restore_telegram_webhook, get_telegram_adapter
-        from services.bot_adapter import register_adapter
-        from services.bot_service import get_decrypted_bot_token
-        from database.connection import SessionLocal
-        from database.models import BotConfig
-
-        await restore_telegram_webhook()
-
-        # Register Telegram adapter if connected
-        db = SessionLocal()
-        try:
-            config = db.query(BotConfig).filter(
-                BotConfig.platform == "telegram",
-                BotConfig.status == "connected"
-            ).first()
-            if config:
-                token = get_decrypted_bot_token(db, "telegram")
-                if token:
-                    adapter = get_telegram_adapter()
-                    await adapter.start(token)
-                    register_adapter(adapter)
-                    print("[startup] Telegram adapter registered")
-        finally:
-            db.close()
-    except Exception as e:
-        print(f"[startup] Telegram webhook restore failed (non-fatal): {e}")
-
-
-@app.on_event("startup")
-async def restore_discord_gateway():
-    """Restore Discord Gateway connection and register adapter after container restart."""
-    try:
-        from database.connection import SessionLocal
-        from database.models import BotConfig
-        from services.bot_service import get_decrypted_bot_token
-        from services.discord_bot_service import start_discord_gateway, get_discord_adapter
-        from services.bot_adapter import register_adapter
-        from api.bot_routes import _process_discord_message_internal
-        import asyncio
-
-        db = SessionLocal()
-        try:
-            config = db.query(BotConfig).filter(
-                BotConfig.platform == "discord",
-                BotConfig.status == "connected"
-            ).first()
-
-            if not config:
-                return
-
-            token = get_decrypted_bot_token(db, "discord")
-            if not token:
-                return
-
-            # Register Discord adapter
-            adapter = get_discord_adapter()
-            await adapter.start(token)
-            register_adapter(adapter)
-            print("[startup] Discord adapter registered")
-
-            async def handle_discord_message(user_id: int, username: str, display_name: str, text: str) -> str:
-                return await _process_discord_message_internal(user_id, username, display_name, text)
-
-            asyncio.create_task(start_discord_gateway(token, handle_discord_message))
-            print(f"[startup] Discord Gateway restore initiated for @{config.bot_username}")
-        finally:
-            db.close()
-    except Exception as e:
-        print(f"[startup] Discord Gateway restore failed (non-fatal): {e}")
-
-
 @app.on_event("shutdown")
 def on_shutdown():
+    if not BACKGROUND_SERVICES_ENABLED:
+        return
     # Shutdown all services (scheduler, market data tasks, auto trading, etc.)
     from services.startup import shutdown_services
-    shutdown_services()
-
-
-@app.on_event("shutdown")
-async def shutdown_discord_gateway():
-    """Stop Discord Gateway on shutdown."""
-    try:
-        from services.discord_bot_service import stop_discord_gateway
-        await stop_discord_gateway()
-    except Exception as e:
-        print(f"[shutdown] Discord Gateway stop failed (non-fatal): {e}")
+    shutdown_services(APP_RUNTIME_PROFILE)
 
 
 # API routes
 from api.market_data_routes import router as market_data_router
 from api.order_routes import router as order_router
 from api.account_routes import router as account_router
+from api.user_routes import router as user_router
 from api.config_routes import router as config_router
 from api.ranking_routes import router as ranking_router
 from api.crypto_routes import router as crypto_router
@@ -627,7 +560,6 @@ from api.system_routes import router as system_router
 from api.binance_routes import router as binance_router
 from api.ai_stream_routes import router as ai_stream_router
 from api.hyper_ai_routes import router as hyper_ai_router
-from api.bot_routes import router as bot_router
 from api.factor_routes import router as factor_router
 from api.factor_research_routes import router as factor_research_router
 from api.factor_portfolio_routes import router as factor_portfolio_router
@@ -637,6 +569,7 @@ from routes.program_routes import router as program_router
 app.include_router(market_data_router)
 app.include_router(order_router)
 app.include_router(account_router)
+app.include_router(user_router)
 app.include_router(config_router)
 app.include_router(ranking_router)
 app.include_router(crypto_router)
@@ -659,7 +592,6 @@ app.include_router(system_router)
 app.include_router(binance_router)
 app.include_router(ai_stream_router)
 app.include_router(hyper_ai_router)
-app.include_router(bot_router)
 app.include_router(factor_router)
 app.include_router(factor_research_router)
 app.include_router(factor_portfolio_router)

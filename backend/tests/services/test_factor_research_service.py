@@ -676,9 +676,17 @@ def test_run_research_returns_auto_live_decision_when_enabled(monkeypatch):
     assert result["auto_paper_deployment"]["deployment"]["mode"] == "paper"
     assert result["auto_live_decision"]["decision"] == "promoted"
     assert captured["paper"]["portfolio_id"] == 42
+    assert captured["paper"]["period"] == "1h"
+    assert captured["paper"]["trigger_interval"] == 3600
+    assert captured["paper"]["signal_pool_ids"] == []
+    assert captured["paper"]["exchange"] == "hyperliquid"
     assert captured["live"]["portfolio_id"] == 42
     assert captured["live"]["paper_account_id"] == 7
     assert captured["live"]["live_account_id"] == 8
+    assert captured["live"]["period"] == "1h"
+    assert captured["live"]["trigger_interval"] == 3600
+    assert captured["live"]["signal_pool_ids"] == []
+    assert captured["live"]["exchange"] == "hyperliquid"
     assert captured["live"]["min_observation_hours"] == 12.0
     assert captured["live"]["min_trades"] == 5
     assert captured["live"]["min_net_pnl"] == 10.0
