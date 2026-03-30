@@ -30,9 +30,7 @@ import SystemLogs from '@/components/layout/SystemLogs'
 import PromptManager from '@/components/prompt/PromptManager'
 import SignalManager from '@/components/signal/SignalManager'
 import AttributionAnalysis from '@/components/analytics/AttributionAnalysis'
-import FactorResearchWorkspacePage from '@/components/factor/FactorResearchWorkspacePage'
-import FactorPortfolioDeploymentsPage from '@/components/factor/FactorPortfolioDeploymentsPage'
-import FactorLiveGateStatusPage from '@/components/factor/FactorLiveGateStatusPage'
+import FactorPipelinePage, { FACTOR_PIPELINE_PAGE, resolveFactorPipelineRoute } from '@/components/factor/FactorPipelinePage'
 import TraderManagement from '@/components/trader/TraderManagement'
 import { HyperliquidPage } from '@/components/hyperliquid'
 import HyperliquidView from '@/components/hyperliquid/HyperliquidView'
@@ -89,9 +87,7 @@ const PAGE_TITLES: Record<string, string> = {
   'program-trader': 'Programs',
   'signal-management': 'Signal System',
   'attribution': 'Attribution Analysis',
-  'factor-research-workspace': 'Factor Research Workspace',
-  'factor-portfolio-deployments': 'Portfolio Deployments',
-  'factor-live-gate': 'Live Gate Status',
+  'factor-pipeline': 'Factor Pipeline',
   'trader-management': 'AI Trader Management',
   'hyperliquid': 'Manual Trading',
   'klines': 'K-Line Charts',
@@ -100,11 +96,40 @@ const PAGE_TITLES: Record<string, string> = {
   'arena-assets': 'Arena Assets',
 }
 
-const PAGE_ALIASES: Record<string, string> = {
-  'factor-library': 'factor-research-workspace',
+interface NormalizedRoute {
+  hash: string
+  page: string
 }
 
-const normalizePage = (page: string): string => PAGE_ALIASES[page] || page
+const splitHashRoute = (rawHash: string): { page: string; searchParams: URLSearchParams } => {
+  const queryIndex = rawHash.indexOf('?')
+  if (queryIndex === -1) {
+    return { page: rawHash, searchParams: new URLSearchParams() }
+  }
+
+  return {
+    page: rawHash.slice(0, queryIndex),
+    searchParams: new URLSearchParams(rawHash.slice(queryIndex + 1)),
+  }
+}
+
+const normalizeRoute = (rawHash: string): NormalizedRoute => {
+  const factorPipelineRoute = resolveFactorPipelineRoute(rawHash)
+  if (factorPipelineRoute) {
+    return {
+      page: FACTOR_PIPELINE_PAGE,
+      hash: factorPipelineRoute.canonicalHash,
+    }
+  }
+
+  const { page, searchParams } = splitHashRoute(rawHash)
+  const search = searchParams.toString()
+
+  return {
+    page,
+    hash: search ? `${page}?${search}` : page,
+  }
+}
 
 function App() {
   const { tradingMode } = useTradingMode()
@@ -117,8 +142,18 @@ function App() {
   const [aiDecisions, setAiDecisions] = useState<AIDecision[]>([])
   const [allAssetCurves, setAllAssetCurves] = useState<any[]>([])
   const [hyperliquidRefreshKey, setHyperliquidRefreshKey] = useState(0)
-  const [currentPage, setCurrentPage] = useState<string>('factor-research-workspace')
+  const [currentPage, setCurrentPage] = useState<string>(FACTOR_PIPELINE_PAGE)
   const tradingModeRef = useRef(tradingMode)
+
+  const syncCurrentPageFromHash = useCallback((rawHash: string) => {
+    const normalizedRoute = normalizeRoute(rawHash)
+    if (!PAGE_TITLES[normalizedRoute.page]) return
+
+    setCurrentPage(normalizedRoute.page)
+    if (normalizedRoute.hash !== rawHash) {
+      window.location.hash = normalizedRoute.hash
+    }
+  }, [])
 
   /**
    * Hash Routing: Updates both React state and browser URL hash.
@@ -131,9 +166,13 @@ function App() {
    * IMPORTANT: All page navigation should use this function, not setCurrentPage directly.
    */
   const handlePageChange = useCallback((page: string) => {
-    const normalizedPage = normalizePage(page)
-    setCurrentPage(normalizedPage)
-    window.location.hash = normalizedPage
+    const normalizedRoute = normalizeRoute(page)
+    if (!PAGE_TITLES[normalizedRoute.page]) return
+
+    setCurrentPage(normalizedRoute.page)
+    if (window.location.hash.slice(1) !== normalizedRoute.hash) {
+      window.location.hash = normalizedRoute.hash
+    }
   }, [])
 
   // Hyper AI states - initialization happens during splash
@@ -178,36 +217,28 @@ function App() {
     const hash = window.location.hash.slice(1)
 
     /**
-     * Hash routing with optional parameters: #page-name or #page-name?view=ID
+     * Hash routing with optional parameters: #page-name or #factor-pipeline?stage=research
      * Extract page name from hash (everything before ? if present)
      */
     if (hash) {
-      const hashParamIndex = hash.indexOf('?')
-      const pageName = hashParamIndex !== -1 ? hash.slice(0, hashParamIndex) : hash
-      const normalizedPage = normalizePage(pageName)
-      if (PAGE_TITLES[normalizedPage]) {
-        setCurrentPage(normalizedPage)
-        if (normalizedPage !== pageName) {
-          window.location.hash = normalizedPage
-        }
-      }
+      syncCurrentPageFromHash(hash)
     }
-  }, [])
+  }, [syncCurrentPageFromHash])
 
   // Listen for hash changes (e.g. from Factor Analysis "Ask AI" button)
   useEffect(() => {
     const onHashChange = () => {
       const hash = window.location.hash.slice(1)
-      if (hash) {
-        const paramIdx = hash.indexOf('?')
-        const pageName = paramIdx !== -1 ? hash.slice(0, paramIdx) : hash
-        const normalizedPage = normalizePage(pageName)
-        if (PAGE_TITLES[normalizedPage]) setCurrentPage(normalizedPage)
+      if (!hash) {
+        setCurrentPage(FACTOR_PIPELINE_PAGE)
+        return
       }
+
+      syncCurrentPageFromHash(hash)
     }
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
-  }, [])
+  }, [syncCurrentPageFromHash])
 
   const [accountRefreshTrigger, setAccountRefreshTrigger] = useState<number>(0)
   const wsRef = useRef<WebSocket | null>(null)
@@ -726,16 +757,8 @@ function App() {
           <AttributionAnalysis />
         )}
 
-        {currentPage === 'factor-research-workspace' && (
-          <FactorResearchWorkspacePage />
-        )}
-
-        {currentPage === 'factor-portfolio-deployments' && (
-          <FactorPortfolioDeploymentsPage />
-        )}
-
-        {currentPage === 'factor-live-gate' && (
-          <FactorLiveGateStatusPage />
+        {currentPage === FACTOR_PIPELINE_PAGE && (
+          <FactorPipelinePage />
         )}
 
         {currentPage === 'trader-management' && (

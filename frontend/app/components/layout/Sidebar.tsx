@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BarChart3, FileText, NotebookPen, Coins, MessageSquare, Mail, Bot, Ghost, ScrollText, Settings, FlaskConical, Github, ShieldCheck, AlertTriangle, Rocket, ShieldAlert } from 'lucide-react'
+import { BarChart3, FileText, NotebookPen, Coins, MessageSquare, Mail, Bot, Ghost, ScrollText, Settings, FlaskConical, Github, ShieldCheck, AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ContactDialog from '@/components/contact/ContactDialog'
 import ExchangeModal from '@/components/exchange/ExchangeModal'
@@ -125,9 +125,7 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
   }
 
   const newFlowNav = [
-    { label: t('sidebar.factorResearchCenter', '因子研究中心'), page: 'factor-research-workspace', icon: FlaskConical },
-    { label: t('sidebar.portfolioDeployments', '组合部署记录'), page: 'factor-portfolio-deployments', icon: Rocket },
-    { label: t('sidebar.liveGateStatus', '实盘门控状态'), page: 'factor-live-gate', icon: ShieldAlert },
+    { label: t('sidebar.factorPipeline', '因子流水线'), page: 'factor-pipeline', icon: FlaskConical },
   ] as const
 
   const oldFlowNav = [
@@ -343,43 +341,19 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
         </div>
       </aside>
 
-      {/* Mobile Navigation - 4 tabs: Research, Deployments, Live Gate, Chat */}
+      {/* Mobile Navigation - single factor entry + chat */}
       <nav className="md:hidden flex flex-row items-center justify-around fixed bottom-0 left-0 right-0 bg-background border-t h-16 px-2 z-50">
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
-            currentPage === 'factor-research-workspace'
+            currentPage === 'factor-pipeline'
               ? 'bg-secondary/80 text-secondary-foreground'
               : 'hover:bg-muted text-muted-foreground'
           }`}
-          onClick={() => onPageChange?.('factor-research-workspace')}
-          title="Research"
+          onClick={() => onPageChange?.('factor-pipeline')}
+          title="Factor"
         >
           <FlaskConical className="w-5 h-5" />
-          <span className="text-xs mt-1">Research</span>
-        </button>
-        <button
-          className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
-            currentPage === 'factor-portfolio-deployments'
-              ? 'bg-secondary/80 text-secondary-foreground'
-              : 'hover:bg-muted text-muted-foreground'
-          }`}
-          onClick={() => onPageChange?.('factor-portfolio-deployments')}
-          title="Deployments"
-        >
-          <Rocket className="w-5 h-5" />
-          <span className="text-xs mt-1">Deploy</span>
-        </button>
-        <button
-          className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
-            currentPage === 'factor-live-gate'
-              ? 'bg-secondary/80 text-secondary-foreground'
-              : 'hover:bg-muted text-muted-foreground'
-          }`}
-          onClick={() => onPageChange?.('factor-live-gate')}
-          title="Live Gate"
-        >
-          <ShieldAlert className="w-5 h-5" />
-          <span className="text-xs mt-1">Gate</span>
+          <span className="text-xs mt-1">Factor</span>
         </button>
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
