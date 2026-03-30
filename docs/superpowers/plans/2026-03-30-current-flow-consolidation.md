@@ -10,20 +10,20 @@
 
 ## Execution Status
 
-- Status: implementation landed on the current branch; runtime smoke remains environment-blocked
+- Status: implementation landed on the current branch; canonical runtime smoke is now re-verified locally
 - Commits:
   - `99d2707` `refactor: canonicalize factor pipeline entry`
   - `5e3ff5a` `refactor: split factor pipeline stages`
   - `7fb8ae5` `docs: standardize factor flow smoke verification`
   - `1994e46` `chore: track factor portfolio smoke script`
+  - `51ce45a` `fix: close factor flow review gaps`
 - Verified:
   - `cd frontend && pnpm build`
   - `cd backend && uv run pytest tests/scripts/test_factor_portfolio_smoke.py -q`
   - `cd backend && uv run pytest tests/services/test_factor_research_service.py tests/services/test_factor_portfolio_service.py tests/services/test_factor_portfolio_deployment_service.py tests/services/test_factor_research_integration.py tests/api/test_factor_research_routes.py tests/api/test_factor_portfolio_routes.py -q`
   - `cd backend && uv run python -c "import main; print('import-ok')"`
-- Blocked:
   - `cd backend && uv run python scripts/factor_portfolio_smoke.py --base-url http://localhost:5611`
-  - Result: `ConnectionRefused` because no backend was listening on `localhost:5611`
+  - Result: passed with `research status`, `latest portfolio`, `deployment summary`, and a non-fatal `live-gate snapshot has no decision yet` warning
 - Residual low-risk notes:
   - empty hash does not auto-normalize to `#factor-pipeline?stage=research`
   - frontend build still emits the pre-existing Vite chunk-size / baseline-browser mapping warnings
@@ -305,8 +305,7 @@ Run: `cd backend && uv run pytest tests/services/test_factor_research_service.py
 
 Expected: `PASS`
 
-- [ ] **Step 7: Exercise the canonical smoke command against a running backend**  
-Blocked on execution: `localhost:5611` was not serving the backend when the command was run, so the smoke hit `ConnectionRefused` instead of an application-level result.
+- [x] **Step 7: Exercise the canonical smoke command against a running backend**
 
 Run: `cd backend && uv run python scripts/factor_portfolio_smoke.py --base-url http://localhost:5611`
 
@@ -345,8 +344,7 @@ Expected:
 - targeted backend suite `PASS`
 - import smoke prints `import-ok`
 
-- [ ] **Step 2: Re-run the smoke command with the canonical path**  
-Blocked on execution: the latest run again failed at connect time because no backend was listening on `http://localhost:5611`.
+- [x] **Step 2: Re-run the smoke command with the canonical path**
 
 Run: `cd backend && uv run python scripts/factor_portfolio_smoke.py --base-url http://localhost:5611`
 
