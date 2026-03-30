@@ -53,9 +53,16 @@ Expected:
 
 ---
 
-## 2.5) Optional One-Command Smoke
+## 2.5) Canonical Smoke / Fast Regression Entry
 
-Use the helper script:
+Use `backend/scripts/factor_portfolio_smoke.py` as the first smoke and quick regression entry for the current factor portfolio flow. The staged output should report:
+
+- `research status`
+- `latest portfolio`
+- `deployment summary`
+- `live-gate decision`
+
+Read-only snapshot:
 
 ```bash
 cd backend
@@ -82,6 +89,13 @@ Trigger + deploy paper:
 cd backend
 uv run python scripts/factor_portfolio_smoke.py --base-url http://localhost:5611 --trigger-run --deploy-paper-account-id 2
 ```
+
+Interpretation:
+
+- `research status` confirms scheduler state and latest run outcome.
+- `latest portfolio` confirms the newest winner snapshot and candidate visibility.
+- `deployment summary` shows the recent paper/live deployment footprint.
+- `live-gate decision` surfaces the latest gate snapshot, and any non-200 response must show as a warning instead of silently disappearing.
 
 ---
 

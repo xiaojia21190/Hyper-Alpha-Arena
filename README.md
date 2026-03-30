@@ -174,7 +174,28 @@ This is the full workflow command set for:
 
 `factor research -> factor portfolio ranking -> pick best portfolio -> deploy to paper`
 
-### One-command smoke (already includes research + best portfolio + paper deploy)
+### Canonical smoke / quick regression entry
+
+Use `backend/scripts/factor_portfolio_smoke.py` as the primary backend smoke and fast regression command for the factor portfolio flow. It reports:
+
+- `research status`
+- `latest portfolio`
+- `deployment summary`
+- `live-gate decision`
+
+Read-only snapshot:
+
+```bash
+docker compose exec app sh -lc "cd /app/backend && python scripts/factor_portfolio_smoke.py --base-url http://127.0.0.1:8802"
+```
+
+Trigger one run and wait for completion:
+
+```bash
+docker compose exec app sh -lc "cd /app/backend && python scripts/factor_portfolio_smoke.py --base-url http://127.0.0.1:8802 --trigger-run"
+```
+
+### Canonical smoke with paper deploy rehearsal
 
 ```bash
 # 1) Start services
@@ -190,7 +211,7 @@ PAPER_ACCOUNT_ID=$(curl -sS -X POST "http://127.0.0.1:8802/api/account/" \
 docker compose exec app sh -lc "cd /app/backend && python scripts/factor_portfolio_smoke.py --base-url http://127.0.0.1:8802 --trigger-run --top-n-symbols 3 --lookback-days 7 --prescreen-limit 2 --wait-timeout 180 --poll-seconds 2 --deploy-paper-account-id ${PAPER_ACCOUNT_ID}"
 ```
 
-### One-command self-check (research -> paper -> auto-live gate decision)
+### Lower-level API example (not the primary regression entry)
 
 ```bash
 bash -lc '

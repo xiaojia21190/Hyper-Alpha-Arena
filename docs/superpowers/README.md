@@ -6,6 +6,7 @@ This index records the actual status of the plans in `docs/superpowers/plans` ag
 
 ## Status Legend
 
+- `planned`: plan written on the current branch, not yet executed
 - `done`: implemented in the current branch
 - `done-foundation`: implemented in the current branch and later extended by newer plans
 - `active-runbook`: not a backlog; still used as an operator checklist
@@ -40,6 +41,10 @@ This index records the actual status of the plans in `docs/superpowers/plans` ag
 - `2026-03-27-factor-runtime.md`
   - Status: `done`
   - Notes: current branch uses the factor runtime split as the main deployment profile
+
+- `2026-03-30-current-flow-consolidation.md`
+  - Status: `done`
+  - Notes: current branch now uses one canonical factor UI flow plus one canonical smoke/regression entry, without adding a separate strategy layer
 
 ## Current Product Line
 
