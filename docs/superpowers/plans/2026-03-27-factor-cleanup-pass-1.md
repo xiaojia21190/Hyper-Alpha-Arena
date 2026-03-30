@@ -2,6 +2,15 @@
 
 Scope: remove bot runtime exposure from the application entry surface while preserving the factor-only product path.
 
+Execution Status (2026-03-30):
+- Completed in commit `baa0d0a`.
+- `backend/main.py` no longer exposes bot runtime startup/shutdown hooks or `api.bot_routes` registration.
+- Runtime dispatch tests were updated to assert factor-focused startup/shutdown behavior.
+- Verification re-run after continuation:
+  - `cd backend && uv run pytest tests/services/test_runtime_settings.py tests/services/test_startup_profiles.py tests/test_main_runtime_dispatch.py tests/services/test_program_execution_service.py tests/services/test_factor_research_service.py tests/services/test_factor_portfolio_service.py tests/services/test_factor_portfolio_deployment_service.py tests/services/test_factor_research_integration.py tests/api/test_factor_research_routes.py tests/api/test_factor_portfolio_routes.py -q` -> `80 passed`
+  - `cd backend && uv run ruff check main.py tests/test_main_runtime_dispatch.py` -> `All checks passed!`
+  - `cd backend && uv run python -m py_compile main.py tests/test_main_runtime_dispatch.py` -> exit `0`
+
 Behavior Lock:
 - `backend/tests/services/test_runtime_settings.py`
 - `backend/tests/services/test_startup_profiles.py`
