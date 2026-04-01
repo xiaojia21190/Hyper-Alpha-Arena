@@ -50,6 +50,7 @@ def calculate_indicators(kline_data: List[Dict[str, Any]], indicators: List[str]
         df = pd.DataFrame(kline_data)
 
         # 确保数据类型正确
+        df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce')
         df['open'] = pd.to_numeric(df['open'], errors='coerce')
         df['high'] = pd.to_numeric(df['high'], errors='coerce')
         df['low'] = pd.to_numeric(df['low'], errors='coerce')
@@ -57,7 +58,7 @@ def calculate_indicators(kline_data: List[Dict[str, Any]], indicators: List[str]
         df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
 
         # 按时间排序
-        df = df.sort_values('timestamp')
+        df = df.sort_values('timestamp').reset_index(drop=True)
 
         results = {}
 
@@ -223,8 +224,24 @@ def _calculate_vwap(df: pd.DataFrame) -> List[float]:
         # VWAP 需要 DatetimeIndex
         # Note: timestamp is stored in seconds (not milliseconds)
         df_copy = df.copy()
-        df_copy['datetime'] = pd.to_datetime(df_copy['timestamp'], unit='s')
+        df_copy['timestamp'] = pd.to_numeric(df_copy['timestamp'], errors='coerce')
+        df_copy = df_copy.dropna(subset=['timestamp', 'high', 'low', 'close', 'volume'])
+        if df_copy.empty:
+            return []
+
+        df_copy['datetime'] = pd.to_datetime(
+            df_copy['timestamp'],
+            unit='s',
+            errors='coerce',
+            utc=True,
+        )
+        df_copy = df_copy.dropna(subset=['datetime']).sort_values('datetime')
+        if df_copy.empty:
+            return []
+
         df_copy = df_copy.set_index('datetime')
+        if not df_copy.index.is_monotonic_increasing:
+            df_copy = df_copy.sort_index()
         vwap = ta.vwap(df_copy['high'], df_copy['low'], df_copy['close'], df_copy['volume'])
         if vwap is None:
             return []

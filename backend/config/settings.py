@@ -73,8 +73,8 @@ class BinanceBrokerConfig(BaseModel):
 
 
 def _get_runtime_profile() -> str:
-    raw = os.getenv("APP_RUNTIME_PROFILE", "full").strip().lower()
-    return raw if raw in {"api", "factor", "full"} else "full"
+    raw = os.getenv("APP_RUNTIME_PROFILE", "factor").strip().lower()
+    return raw if raw in {"api", "factor", "full"} else "factor"
 
 
 # Binance Broker Configuration (optional, for fee rebates)
@@ -95,10 +95,10 @@ FRONTEND_WATCHER_ENABLED = _env_bool("FRONTEND_WATCHER_ENABLED", False)
 BINANCE_DAILY_QUOTA_LIMIT = 40
 
 # Factor Engine toggle (set to "true" to enable factor computation)
-FACTOR_ENGINE_ENABLED = os.getenv("FACTOR_ENGINE_ENABLED", "false").lower() == "true"
+FACTOR_ENGINE_ENABLED = os.getenv("FACTOR_ENGINE_ENABLED", "true").lower() == "true"
 
 # Automated factor research loop
-FACTOR_RESEARCH_ENABLED = os.getenv("FACTOR_RESEARCH_ENABLED", "false").lower() == "true"
+FACTOR_RESEARCH_ENABLED = os.getenv("FACTOR_RESEARCH_ENABLED", "true").lower() == "true"
 FACTOR_RESEARCH_INTERVAL_SECONDS = _env_int("FACTOR_RESEARCH_INTERVAL_SECONDS", 6 * 3600)
 FACTOR_RESEARCH_EXCHANGE = os.getenv("FACTOR_RESEARCH_EXCHANGE", "hyperliquid")
 FACTOR_RESEARCH_TOP_N_SYMBOLS = _env_int("FACTOR_RESEARCH_TOP_N_SYMBOLS", 20)
@@ -108,10 +108,10 @@ FACTOR_RESEARCH_FACTOR_SCOPE = os.getenv("FACTOR_RESEARCH_FACTOR_SCOPE", "builti
 FACTOR_RESEARCH_PERIOD = os.getenv("FACTOR_RESEARCH_PERIOD", "1h")
 FACTOR_RESEARCH_PRESCREEN_LIMIT = _env_int("FACTOR_RESEARCH_PRESCREEN_LIMIT", 10)
 FACTOR_RESEARCH_RUN_ON_STARTUP = (
-    os.getenv("FACTOR_RESEARCH_RUN_ON_STARTUP", "false").lower() == "true"
+    os.getenv("FACTOR_RESEARCH_RUN_ON_STARTUP", "true").lower() == "true"
 )
 FACTOR_RESEARCH_AUTO_PROMOTE_PAPER = (
-    os.getenv("FACTOR_RESEARCH_AUTO_PROMOTE_PAPER", "false").lower() == "true"
+    os.getenv("FACTOR_RESEARCH_AUTO_PROMOTE_PAPER", "true").lower() == "true"
 )
 FACTOR_RESEARCH_PAPER_ACCOUNT_ID = _env_int("FACTOR_RESEARCH_PAPER_ACCOUNT_ID", 0)
 FACTOR_RESEARCH_AUTO_PROMOTE_LIVE = (

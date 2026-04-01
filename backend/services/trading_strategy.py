@@ -169,14 +169,16 @@ class StrategyManager:
                         exchange=getattr(strategy, 'exchange', None) or "hyperliquid",
                     )
                     self.strategies[strategy.account_id] = state
-
-                    # DEBUG: Print loaded strategy configuration
-                    print(
-                        f"[DEBUG] Loaded strategy for account {strategy.account_id} ({account.name}): "
-                        f"interval={strategy.trigger_interval}s ({strategy.trigger_interval/60:.1f}min), "
-                        f"signal_pool_ids={pool_ids}, enabled={strategy.enabled}, "
-                        f"scheduled_trigger={strategy.scheduled_trigger_enabled}, "
-                        f"last_trigger={state.last_trigger_at}"
+                    logger.debug(
+                        "Loaded strategy for account %s (%s): interval=%ss, signal_pool_ids=%s, "
+                        "enabled=%s, scheduled_trigger=%s, last_trigger=%s",
+                        strategy.account_id,
+                        account.name,
+                        strategy.trigger_interval,
+                        pool_ids,
+                        strategy.enabled,
+                        strategy.scheduled_trigger_enabled,
+                        state.last_trigger_at,
                     )
 
                 logger.info(f"Loaded {len(self.strategies)} strategies")
@@ -227,7 +229,6 @@ class StrategyManager:
 
         except Exception as e:
             logger.error(f"Error handling price update for {symbol}: {e}")
-            print(f"Error in strategy manager: {e}")
 
     def _execute_strategy(
         self,
@@ -350,8 +351,17 @@ class HyperliquidStrategyManager(StrategyManager):
         pool_name = pool.get("pool_name", "Unknown")
         event_time = datetime.now(timezone.utc)
 
-        print(f"[HyperliquidStrategy] Signal pool triggered: {pool_name} (pool_id={pool_id}) on {symbol}")
-        print(f"[HyperliquidStrategy] Checking {len(self.strategies)} strategies for pool_id={pool_id}")
+        logger.info(
+            "[HyperliquidStrategy] Signal pool triggered: %s (pool_id=%s) on %s",
+            pool_name,
+            pool_id,
+            symbol,
+        )
+        logger.debug(
+            "[HyperliquidStrategy] Checking %d strategies for pool_id=%s",
+            len(self.strategies),
+            pool_id,
+        )
 
         # Also trigger Program Trader execution
         try:
@@ -363,7 +373,12 @@ class HyperliquidStrategyManager(StrategyManager):
         # Find all strategies bound to this signal pool (check if pool_id in signal_pool_ids)
         found_match = False
         for account_id, state in self.strategies.items():
-            print(f"[HyperliquidStrategy] Account {account_id}: signal_pool_ids={state.signal_pool_ids}, enabled={state.enabled}")
+            logger.debug(
+                "[HyperliquidStrategy] Account %s: signal_pool_ids=%s, enabled=%s",
+                account_id,
+                state.signal_pool_ids,
+                state.enabled,
+            )
             if pool_id in state.signal_pool_ids:
                 found_match = True
                 # Try to mark as triggered (handles running state check)
@@ -379,16 +394,23 @@ class HyperliquidStrategyManager(StrategyManager):
                         "market_data_snapshot": market_data,
                         "signal_trigger_id": pool.get("trigger_log_id"),  # For decision tracking
                     }
-                    print(f"[HyperliquidStrategy] Executing strategy for account {account_id} (signal pool: {pool_name})")
+                    logger.info(
+                        "[HyperliquidStrategy] Executing strategy for account %s (signal pool: %s)",
+                        account_id,
+                        pool_name,
+                    )
                     self._execute_strategy(
                         account_id, symbol, event_time,
                         trigger_type="signal", trigger_context=trigger_context
                     )
                 else:
-                    print(f"[HyperliquidStrategy] Account {account_id} mark_triggered_by_signal returned False (already running?)")
+                    logger.debug(
+                        "[HyperliquidStrategy] Account %s skipped signal trigger because it is already running",
+                        account_id,
+                    )
 
         if not found_match:
-            print(f"[HyperliquidStrategy] No strategy found bound to pool_id={pool_id}")
+            logger.debug("[HyperliquidStrategy] No strategy found bound to pool_id=%s", pool_id)
 
     def _load_strategies(self):
         """Load only Hyperliquid-enabled strategies from database"""
@@ -418,12 +440,17 @@ class HyperliquidStrategyManager(StrategyManager):
                     )
                     self.strategies[strategy.account_id] = state
 
-                    print(
-                        f"[HyperliquidStrategy DEBUG] Loaded strategy for account {strategy.account_id} ({account.name}): "
-                        f"interval={strategy.trigger_interval}s ({strategy.trigger_interval/60:.1f}min), "
-                        f"signal_pool_ids={pool_ids}, enabled={strategy.enabled}, exchange={state.exchange}, "
-                        f"scheduled_trigger={strategy.scheduled_trigger_enabled}, "
-                        f"last_trigger={state.last_trigger_at}"
+                    logger.debug(
+                        "[HyperliquidStrategy] Loaded strategy for account %s (%s): interval=%ss, "
+                        "signal_pool_ids=%s, enabled=%s, exchange=%s, scheduled_trigger=%s, last_trigger=%s",
+                        strategy.account_id,
+                        account.name,
+                        strategy.trigger_interval,
+                        pool_ids,
+                        strategy.enabled,
+                        state.exchange,
+                        strategy.scheduled_trigger_enabled,
+                        state.last_trigger_at,
                     )
 
                 logger.info(f"[HyperliquidStrategy] Loaded {len(self.strategies)} strategies")

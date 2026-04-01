@@ -52,7 +52,25 @@ Verified:
 
 Pending:
 - Startup logs still contain pre-existing SQLite / `information_schema` migration noise that is outside this runtime-split plan.
-- Keep `backend/api/user_routes.py` and `backend/tests/api/test_user_routes.py` out of runtime-only commits unless explicitly folded into scope.
+- Local follow-up changes exist in the current worktree as of 2026-04-01:
+  - log-noise reduction only:
+    - `backend/services/hyperliquid_market_data.py`
+    - `backend/services/market_stream.py`
+    - `backend/services/trading_strategy.py`
+  - focused hardening with local regression coverage:
+    - `backend/services/technical_indicators.py`
+    - `backend/tests/services/test_technical_indicators.py`
+    - `backend/services/scheduler.py`
+    - `backend/tests/services/test_scheduler.py`
+  - separate API/workflow slice:
+    - `backend/api/user_routes.py`
+    - `backend/tests/api/test_user_routes.py`
+- Focused follow-up verification passed on 2026-04-01:
+  - `uv run pytest tests/services/test_technical_indicators.py tests/services/test_scheduler.py tests/api/test_user_routes.py -q`
+  - Result: `5 passed`
+- Scope decision:
+  - keep `backend/api/user_routes.py` and `backend/tests/api/test_user_routes.py` out of runtime-only commits unless explicitly folded into a separate API task
+  - if retained, the log-noise / VWAP / scheduler follow-up changes should land as a separate hardening commit, not be backfilled into the original runtime-split checkpoints
 
 ## File Map
 

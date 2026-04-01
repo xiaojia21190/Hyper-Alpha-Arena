@@ -78,7 +78,7 @@ class HyperliquidClient:
             try:
                 ticker = self.exchange.fetch_ticker(formatted_symbol)
                 price = ticker['last']
-                logger.info(f"Got price for {formatted_symbol}: {price}")
+                logger.debug("Got price for %s: %s", formatted_symbol, price)
                 return float(price) if price else None
             except Exception as perp_error:
                 # If perpetual format fails, try spot format as fallback
@@ -90,7 +90,7 @@ class HyperliquidClient:
                         logger.debug(f"Perpetual format failed for {symbol}, retrying with spot format: {spot_symbol}")
                         ticker = self.exchange.fetch_ticker(spot_symbol)
                         price = ticker['last']
-                        logger.info(f"Got price for {spot_symbol}: {price}")
+                        logger.debug("Got price for %s: %s", spot_symbol, price)
                         return float(price) if price else None
                 # Re-raise if not a symbol format issue
                 raise
@@ -106,7 +106,12 @@ class HyperliquidClient:
             if result is None:
                 return self._get_ccxt_ticker_fallback(symbol)
 
-            logger.info(f"Got Hyperliquid ticker for {symbol}: price={result['price']}, change24h={result['change24h']:.2f}")
+            logger.debug(
+                "Got Hyperliquid ticker for %s: price=%s, change24h=%.2f",
+                symbol,
+                result["price"],
+                result["change24h"],
+            )
             return result
 
         except Exception as e:
@@ -130,7 +135,7 @@ class HyperliquidClient:
 
                 rows.append(self._build_ticker_result(symbol, asset_data))
 
-            logger.info(f"Got Hyperliquid ticker rows for {len(rows)} symbols")
+            logger.debug("Got Hyperliquid ticker rows for %d symbols", len(rows))
             return rows
         except Exception as e:
             logger.error(f"Error fetching Hyperliquid ticker rows: {e}")
